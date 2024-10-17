@@ -67,12 +67,15 @@ d_prod_test <- model.matrix(selectedchoice ~ -1 + ., data = d[,c("selectedchoice
 
 test = distinct(all[,-1])
 
-mb <- mbart2(x.train = all[,-1],
+mb <- mbart2(x.train = all[,-c(1,2)],
              y.train = all[,1],
              x.test = test,
              type = 'pbart',
              ntree = 100,
              ndpost = 1000,nskip = 100)
+
+
+
 
 test_list <- list()
 for(i in 1:55){
@@ -84,6 +87,7 @@ test.df$pred <- mb$prob.test.mean
 
 test_list <- list()
 for(i in 1:55){
+  print(i)
 test_list[[i]] <- test.df[test.df[,paste0("product",i)] == 1,] %>% filter(product == i)
 }
 
