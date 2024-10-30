@@ -60,7 +60,8 @@ data <- data.frame(
   WTP_lognormal = WTP_lognormal,
   WTP_bimodal = WTP_bimodal,
   WTP_uniform = WTP_uniform,
-  WTP_friedman = WTP_friedman
+  WTP_friedman = WTP_friedman,
+  WTP_step = WTP_step
 )
 
 # Print first few rows

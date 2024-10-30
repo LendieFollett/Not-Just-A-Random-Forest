@@ -51,22 +51,22 @@ mb <- pbart(x.train = d[,-1],
              ntree = 200,
              ndpost = 1000,nskip = 5000)
 
-mlr <- stan_glm(CV_donate_yes ~ CV_donate_bid + hh_income + age, 
-                                  data = d, 
-                                  family = binomial(link = "logit"), 
-                                  prior = normal(0, 2.5), # Define priors
-                                  prior_intercept = normal(0, 5), 
-                                  chains = 1, iter = 2000)
+bprobit <- stan_glm(CV_donate_yes ~ CV_donate_bid + hh_income + age, 
+                    data = d , 
+                    family = binomial(link = "probit"), 
+                    prior = normal(0, 1), 
+                    prior_intercept = normal(0, 1), 
+                    chains = 1, iter = 2000,
+                    init = "0")
 
-plot(mb$prob.test.mean, apply(posterior_epred(mlr, test_notends ) , 2, mean))
-plot(mb$prob.train.mean, apply(posterior_epred(mlr, d ) , 2, mean))
+
 
 library(rstanarm)
 samps <- as.data.frame(mlr)
 
 
 bresults <- get_wtp(pred_matrix = (1-mb$prob.test) %>%  t() )
-lrresults <- get_wtp(pred_matrix = 1-posterior_epred(mlr, test_notends ) %>% t())
+lrresults <- get_wtp(pred_matrix = 1-posterior_epred(bprobit,  test_notends[,-1] ) %>% t())
 
 tdat_long2 <- bresults$wtp
 tdatlr_long2 <- lrresults$wtp
@@ -128,14 +128,31 @@ dcurves2 <- dcurves%>%
     quant95 = quantile(wtp_q, .95)) 
 write.csv(dcurves2, "bart_bird_demand_curve.csv")
 
+dcurveslr2 <- dcurveslr%>% 
+  group_by(quant = round_to_nearest_0.05(quant)) %>% 
+  summarise(
+    mean = median(wtp_q),
+    quant05 = quantile(wtp_q, .05),
+    quant95 = quantile(wtp_q, .95)) 
 
-
-p2 <- ggplot() +
+ggplot() +
   geom_line(aes(x = quant, y = wtp_q, group = variable), alpha = I(.1), data = dcurves) +
   #geom_line(aes(x = quant, y = wtp_q, group = variable), alpha = I(.15), data = dcurveslr, colour = "blue") +
   geom_line(aes(x = quant, y= quant05),colour = "red", data = dcurves2, linetype = 2) +
   geom_line(aes(x = quant, y= quant95),colour = "red", data = dcurves2, linetype = 2) +
   geom_line(aes(x = quant, y= mean),colour = "red", data = dcurves2) +
+  geom_line(aes(x = quant, y= mean),colour = "blue", data = dcurveslr2)+
+  geom_line(aes(x = quant, y= quant05),colour = "blue", data = dcurveslr2, linetype = 2) +
+  geom_line(aes(x = quant, y= quant95),colour = "blue", data = dcurveslr2, linetype = 2) +
+  labs(x = "P(WTP < A)", y = "WTP US $") +
+  theme_bw()
+
+ggplot() +
+  geom_line(aes(x = quant, y = wtp_q, group = variable), alpha = I(.1), data = dcurveslr) +
+  #geom_line(aes(x = quant, y = wtp_q, group = variable), alpha = I(.15), data = dcurveslr, colour = "blue") +
+  geom_line(aes(x = quant, y= quant05),colour = "red", data = dcurveslr2, linetype = 2) +
+  geom_line(aes(x = quant, y= quant95),colour = "red", data = dcurveslr2, linetype = 2) +
+  geom_line(aes(x = quant, y= mean),colour = "red", data = dcurveslr2) +
   labs(x = "P(WTP < A)", y = "WTP US $") +
   theme_bw()
 ggsave("bird_wtp_mcmc.pdf")

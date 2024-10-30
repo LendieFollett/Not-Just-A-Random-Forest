@@ -6,13 +6,14 @@ library(nnet)
 library(foreach)
 library(doParallel)
 library(tidyr)
+library(reshape2)
 source("functions.R")
 
 numCores <- detectCores() - 1  # Use one less than the total number of cores
 cl <- makeCluster(numCores)
 registerDoParallel(cl)
 
-datasets <- c("WTP_normal" , "WTP_friedman", "WTP_step")#"WTP_bimodal" ,  "WTP_uniform", 
+datasets <- c("WTP_normal" ,"WTP_bimodal" ,  "WTP_uniform", "WTP_lognormal", "WTP_friedman", "WTP_step") 
 
 registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 
@@ -57,8 +58,8 @@ results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
     mean_lognormal <- 100
  
     # Convert to normal distribution parameters
-    mu <- log(mean_lognormal^2 / sqrt(mean_lognormal^2 + sigma_W^2))
-    sigma <- sqrt(log(1 + (sigma_W^2 / mean_lognormal^2)))
+    mu <- log((mean_lognormal + beta_1*Xi)^2 / sqrt((mean_lognormal + beta_1*Xi)^2 + sigma_W^2))
+    sigma <- sqrt(log(1 + (sigma_W^2 / (mean_lognormal + beta_1*Xi)^2)))
     
     WTP_lognormal <- rlnorm(n = n, meanlog = mu, sdlog = sigma)
     
@@ -206,6 +207,30 @@ results_combined %>% group_by(data) %>%
             bprobit = mean(bprobit)/mean(probit)
             )
 
+
+
+results_combined %>% 
+  group_by(data) %>% 
+  summarise(
+    bart_q_min = min(bart_q / probit, na.rm = TRUE),
+    bart_q_q1 = quantile(bart_q / probit, 0.25, na.rm = TRUE),
+    bart_q_median = median(bart_q / probit, na.rm = TRUE),
+    bart_q_mean = mean(bart_q / probit, na.rm = TRUE),
+    bart_q_q3 = quantile(bart_q / probit, 0.75, na.rm = TRUE),
+    bart_q_max = max(bart_q / probit, na.rm = TRUE),
+    
+    nn_q_min = min(nn_q / probit, na.rm = TRUE),
+    nn_q_q1 = quantile(nn_q / probit, 0.25, na.rm = TRUE),
+    nn_q_median = median(nn_q / probit, na.rm = TRUE),
+    nn_q_q3 = quantile(nn_q / probit, 0.75, na.rm = TRUE),
+    nn_q_max = max(nn_q / probit, na.rm = TRUE),
+    
+    bprobit_min = min(bprobit / probit, na.rm = TRUE),
+    bprobit_q1 = quantile(bprobit / probit, 0.25, na.rm = TRUE),
+    bprobit_median = median(bprobit / probit, na.rm = TRUE),
+    bprobit_q3 = quantile(bprobit / probit, 0.75, na.rm = TRUE),
+    bprobit_max = max(bprobit / probit, na.rm = TRUE)
+  )
 
 results_combined %>% 
   group_by(data) %>% 
