@@ -62,7 +62,7 @@ bprobit <- stan_glm(CV_donate_yes ~ CV_donate_bid + hh_income + age,
 
 
 library(rstanarm)
-samps <- as.data.frame(mlr)
+samps <- as.data.frame(bprobit)
 
 
 bresults <- get_wtp(pred_matrix = (1-mb$prob.test) %>%  t() )
@@ -73,16 +73,17 @@ tdatlr_long2 <- lrresults$wtp
 
 
 #BART
-p1 <- tdat_long2 %>% 
+ tdat_long2 %>% 
   merge(test, by = "ID") %>% 
   filter(age <80) %>% 
   ggplot() +
-  geom_density(aes(x = wtp_q, fill = as.factor(hh_income)), alpha = I(.5)) +
+  geom_density(aes(x = wtp_q, fill = as.factor(hh_income)), alpha = I(.5), adjust = 2) +
   facet_wrap(~age, scales = "free")+
   scale_fill_brewer("Income") +
-  labs(title="BART")
-p1
+  labs(title="BART") +
+   theme_bw()
 
+ggsave("bird_wtp_demographics.pdf")
 p1 <- tdat_long2 %>% 
   merge(test, by = "ID") %>% 
   filter(age <80) %>% 
@@ -91,7 +92,8 @@ p1 <- tdat_long2 %>%
   facet_wrap(~age, scales = "free")+
   theme_bw() +
   labs(x = "Income", y = "WTP (US $)")
-ggsave("bird_wtp_demographics.pdf")
+p1
+
 #LOGISTIC REGRESSION
 p2 <- tdatlr_long2 %>%
   merge(test, by = "ID") %>% 
@@ -99,6 +101,7 @@ p2 <- tdatlr_long2 %>%
   geom_density(aes(x = wtp_q, fill = as.factor(hh_income)), alpha = I(.5)) +
   facet_wrap(~age, scales = "free")+
   scale_fill_brewer("Income") +
+  theme_bw()+
   labs(title="Bayesian Logistic Regression")
 library(gridExtra)
  grid.arrange(p1,p2, ncol = 2) 
@@ -138,14 +141,15 @@ dcurveslr2 <- dcurveslr%>%
 ggplot() +
   geom_line(aes(x = quant, y = wtp_q, group = variable), alpha = I(.1), data = dcurves) +
   #geom_line(aes(x = quant, y = wtp_q, group = variable), alpha = I(.15), data = dcurveslr, colour = "blue") +
-  geom_line(aes(x = quant, y= quant05),colour = "red", data = dcurves2, linetype = 2) +
-  geom_line(aes(x = quant, y= quant95),colour = "red", data = dcurves2, linetype = 2) +
-  geom_line(aes(x = quant, y= mean),colour = "red", data = dcurves2) +
-  geom_line(aes(x = quant, y= mean),colour = "blue", data = dcurveslr2)+
-  geom_line(aes(x = quant, y= quant05),colour = "blue", data = dcurveslr2, linetype = 2) +
-  geom_line(aes(x = quant, y= quant95),colour = "blue", data = dcurveslr2, linetype = 2) +
-  labs(x = "P(WTP < A)", y = "WTP US $") +
+  geom_line(aes(x = quant, y= quant05),colour = "hotpink", data = dcurves2, linetype = 2, size = 1) +
+  geom_line(aes(x = quant, y= quant95),colour = "hotpink", data = dcurves2, linetype = 2, size = 1) +
+  geom_line(aes(x = quant, y= mean),colour = "hotpink", data = dcurves2, size = 1) +
+  geom_line(aes(x = quant, y= mean),colour = "green", data = dcurveslr2, size = 1)+
+  #geom_line(aes(x = quant, y= quant05),colour = "blue", data = dcurveslr2, linetype = 2) +
+  #geom_line(aes(x = quant, y= quant95),colour = "blue", data = dcurveslr2, linetype = 2) +
+  labs(x = "P(WTP < A)", y = "WTP US $", caption = "BART = blue, probit = green") +
   theme_bw()
+ggsave("wtp_envelope.pdf")
 
 ggplot() +
   geom_line(aes(x = quant, y = wtp_q, group = variable), alpha = I(.1), data = dcurveslr) +

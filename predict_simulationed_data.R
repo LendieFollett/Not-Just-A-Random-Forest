@@ -18,7 +18,7 @@ datasets <- c("WTP_normal" ,"WTP_bimodal" ,  "WTP_uniform", "WTP_lognormal", "WT
 registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 
 results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
-  foreach(reps = 1:10) %dopar% {
+  foreach(reps = 1:25) %dopar% {
     r <- reps
     # Load necessary data and scripts
     # Set seed for reproducibility
@@ -205,31 +205,34 @@ results_combined %>% group_by(data) %>%
            # lr_q = mean(lr_q)/mean(probit),
             #probit = mean(probit)/mean(probit),
             bprobit = mean(bprobit)/mean(probit)
-            )
+            ) %>% 
+  xtable()
 
 
 
 results_combined %>% 
   group_by(data) %>% 
   summarise(
-    bart_q_min = min(bart_q / probit, na.rm = TRUE),
-    bart_q_q1 = quantile(bart_q / probit, 0.25, na.rm = TRUE),
-    bart_q_median = median(bart_q / probit, na.rm = TRUE),
+    #bart_q_min = min(bart_q / probit, na.rm = TRUE),
+    #bart_q_q1 = quantile(bart_q / probit, 0.25, na.rm = TRUE),
+    #bart_q_median = median(bart_q / probit, na.rm = TRUE),
     bart_q_mean = mean(bart_q / probit, na.rm = TRUE),
-    bart_q_q3 = quantile(bart_q / probit, 0.75, na.rm = TRUE),
-    bart_q_max = max(bart_q / probit, na.rm = TRUE),
+    #bart_q_q3 = quantile(bart_q / probit, 0.75, na.rm = TRUE),
+    #bart_q_max = max(bart_q / probit, na.rm = TRUE),
     
-    nn_q_min = min(nn_q / probit, na.rm = TRUE),
-    nn_q_q1 = quantile(nn_q / probit, 0.25, na.rm = TRUE),
-    nn_q_median = median(nn_q / probit, na.rm = TRUE),
-    nn_q_q3 = quantile(nn_q / probit, 0.75, na.rm = TRUE),
-    nn_q_max = max(nn_q / probit, na.rm = TRUE),
+    #nn_q_min = min(nn_q / probit, na.rm = TRUE),
+    #nn_q_q1 = quantile(nn_q / probit, 0.25, na.rm = TRUE),
+    #nn_q_median = median(nn_q / probit, na.rm = TRUE),
+    nn_q_mean = mean(nn_q / probit, na.rm = TRUE),
+    #nn_q_q3 = quantile(nn_q / probit, 0.75, na.rm = TRUE),
+    #nn_q_max = max(nn_q / probit, na.rm = TRUE),
     
-    bprobit_min = min(bprobit / probit, na.rm = TRUE),
-    bprobit_q1 = quantile(bprobit / probit, 0.25, na.rm = TRUE),
-    bprobit_median = median(bprobit / probit, na.rm = TRUE),
-    bprobit_q3 = quantile(bprobit / probit, 0.75, na.rm = TRUE),
-    bprobit_max = max(bprobit / probit, na.rm = TRUE)
+    #bprobit_min = min(bprobit / probit, na.rm = TRUE),
+    #bprobit_q1 = quantile(bprobit / probit, 0.25, na.rm = TRUE),
+    #bprobit_median = median(bprobit / probit, na.rm = TRUE),
+    bprobit_mean = mean(bprobit / probit, na.rm = TRUE),
+    #bprobit_q3 = quantile(bprobit / probit, 0.75, na.rm = TRUE),
+    #bprobit_max = max(bprobit / probit, na.rm = TRUE)
   )
 
 results_combined %>% 
@@ -237,7 +240,8 @@ results_combined %>%
   summarise(diff = t.test(bart_q, probit, paired = TRUE)$estimate,
             statistic = t.test(bart_q, probit, paired = TRUE)$statistic,
             p.value = t.test(bart_q, probit, paired = TRUE)$p.value
-  )
+  )%>% 
+  xtable(digits = c(1,10,2,2,-1))
 
 
 
