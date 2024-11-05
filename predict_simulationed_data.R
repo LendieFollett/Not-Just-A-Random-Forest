@@ -13,12 +13,14 @@ numCores <- detectCores() - 1  # Use one less than the total number of cores
 cl <- makeCluster(numCores)
 registerDoParallel(cl)
 
-datasets <- c("WTP_normal" ,"WTP_bimodal" ,  "WTP_uniform", "WTP_lognormal", "WTP_friedman", "WTP_step") 
+datasets <- c("WTP_normal" , "WTP_friedman", "WTP_step") 
 
 registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 
 results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
-  foreach(reps = 1:25) %dopar% {
+  foreach(reps = 1:10) %dopar% {
+    #introduce sparsity into prediction matrix?
+    sparsity = FALSE
     r <- reps
     # Load necessary data and scripts
     # Set seed for reproducibility
@@ -27,81 +29,46 @@ results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
     # Number of observations
     n <- 1000
     
-    # Setting up parameters
-    sigma_W <- 25  # standard deviation for normal distribution
+    #number of x variables
+    nP <- 10
     
-    beta_N0 <- 100  # for normal distribution
-    beta_L0 <- log(100) - 0.5 * log(1 + (sigma_W/100)^2)  # for log-normal distribution
-    beta_B0 <- 100  # for bimodal distribution
-    beta_U0 <- 100  # for uniform distribution
-    beta_1 <- 2
+    # standard deviation
+    sigma_1 <- 10
+    sigma_2 <- 1
+    #intercept 
+    beta_N0 <- 100 
+    beta_linear <- 25
     
-    a <- 0.5 * sigma_W * sqrt(12)  # for uniform distribution
+    # X_i drawn from U[-1, 1]
+    X <- runif(n*nP, 0, 1) %>% matrix(ncol = nP)
     
-    # X_i drawn from U[-30, 30]
-    Xi <- runif(n, -30, 30)
-    
-    #For friedman function
-    X1 <- runif(n,0,1)
-    X2 <- runif(n,0,1)
-    X3 <- runif(n,0,1)
-    X4 <- runif(n,0,1)
-    X5 <- runif(n,0,1)
-    
-    # Normal WTP_i = beta_N0 + beta_1 * X_i + error term (normally distributed)
-    epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_W)
-    WTP_normal <- beta_N0 + beta_1 * Xi + epsilon_Ni
-    
-    # Log-normal WTP_i = exp(beta_L0 + beta_1 * X_i + error term (normally distributed))
-    sigma_L <- sqrt(log(1 + (sigma_W/100)^2))
-    epsilon_Li <- rnorm(n, mean = 0, sd = sigma_L)
-    mean_lognormal <- 100
- 
-    # Convert to normal distribution parameters
-    mu <- log((mean_lognormal + beta_1*Xi)^2 / sqrt((mean_lognormal + beta_1*Xi)^2 + sigma_W^2))
-    sigma <- sqrt(log(1 + (sigma_W^2 / (mean_lognormal + beta_1*Xi)^2)))
-    
-    WTP_lognormal <- rlnorm(n = n, meanlog = mu, sdlog = sigma)
-    
-    # Bimodal WTP_i = beta_B0 + beta_1 * X_i + error term (normally distributed) + tau_i (bimodal)
-    epsilon_Bi <- rnorm(n, mean = 0, sd = 1)
-    rho_i <- runif(n)
-    tau_i <- ifelse(rho_i > 0.5, 1, -1)
-    delta <- sqrt(sigma_W^2 - 1)
-    WTP_bimodal <- beta_B0 + beta_1 * Xi + epsilon_Bi + tau_i * delta
-    
-    # Uniform WTP_i = beta_U0 + beta_1 * X_i + error term (uniformly distributed)
-    epsilon_Ui <- runif(n, -a, a)
-    WTP_uniform <- beta_U0 + beta_1 * Xi + epsilon_Ui
+    # Normal WTP_i = beta_N0 + beta_linear * X_i + error term (normally distributed)
+    epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
+    WTP_normal <- beta_N0 + beta_linear * X[,1] + epsilon_Ni
     
     #Friedman
-    WTP_friedman <- 30 + 5*(10*sin(pi*X1*X2) + 20*(X3 - 0.5)^2 + 10*X4 + 5*X5) + rnorm(n, 0, 1)
-    
+    WTP_friedman <-  30 +  5*(10*sin(pi*X[,1]*X[,2]) + 20*(X[,3] - 0.5)^2 + 10*X[,4] + 5*X[,5]) + rnorm(n, 0, sigma_2)
     
     # Step function, normal error
-    epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_W)
-    WTP_step <- beta_N0 + -25 * (Xi < 0) + 25*(Xi > 0) + epsilon_Ni
+    epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
+    WTP_step <- beta_N0 + beta_linear * (X[,1] < 0.5) + epsilon_Ni
     
     
     # Create a data frame to store the results
     data <- data.frame(
       WTP_normal = WTP_normal,
-      WTP_lognormal = WTP_lognormal,
-      WTP_bimodal = WTP_bimodal,
-      WTP_uniform = WTP_uniform,
       WTP_friedman = WTP_friedman, #the only one that uses X1-X5
       WTP_step = WTP_step
     )
     
     # Print first few rows
     head(data)
-    A <- c(25, 50, 75, 125, 175)
+    A <- c(25, 50, 75, 125, 150)
     A_samps <- sample(A, size = nrow(data), replace=TRUE) %>% as.matrix
     
-    survey <- data.frame(Xi = Xi,
+    survey <- data.frame(X = X,
                          A = A_samps,
-                         apply(data, 2, function(x){ifelse(x > A_samps, 1, 0)}),
-                         X1, X2, X3, X4, X5)
+                         apply(data, 2, function(x){ifelse(x > A_samps, 1, 0)}))
     
     train.idx <- sample(1:nrow(survey), size = .7*nrow(survey), replace=FALSE)
     
@@ -110,30 +77,42 @@ results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
     test.wtp <- data[-train.idx,]
 
     # Set up data and test points
-    pts <- c(A, c(0, 176))
+    pts <- c(A, c(0, 151))
     epts <- c(min(pts), max(pts))
     
     test$ID <- 1:nrow(test)
-    test.y <- test[, paste0("WTP", c("_normal", "_bimodal", "_uniform", "_friedman"))]
+    test.y <- test[, paste0("WTP", c("_normal", "_friedman", "_step"))]
     
     test2 <- test[rep(1:nrow(test), each = length(pts)),] %>%
       mutate(A = rep(pts, nrow(test)))
     
-    test2 <- test2[, c("ID", "Xi", "A", paste0("X", 1:5))]
+    test2 <- test2[, c("ID", "A", paste0("X.", 1:10))]
     
     test_ends <- test2 %>% filter(A %in% c(max(pts), min(pts)))
     test_notends <- test2 %>% filter(!A %in% c(max(pts), min(pts)))
     
-   
-    if (c != "WTP_friedman") { # Case when the column is NOT "WTP_friedman"
-      xa_list <- c("Xi", "A")
-      x_list <- xa_list[!xa_list == "A"]
-      f <- as.formula(paste0(c, "~ A + Xi"))
-    }else{ #Friedman
-      xa_list <-  c("A", paste0("X", 1:5))
-      x_list <- xa_list[!xa_list == "A"]
-      f <- as.formula(paste0(c, "~ A + X1 + X2 + X3 + X4 + X5"))
-    }
+ if (sparsity == TRUE){
+   if (c != "WTP_friedman") { # Case when the column is NOT "WTP_friedman"
+     xa_list <- c("X", "A")
+     x_list <- xa_list[!xa_list == "A"]
+     f <- as.formula(paste0(c, "~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
+   }else{ #Friedman
+     xa_list <-  c("A", paste0("X.", 1:10))
+     x_list <- xa_list[!xa_list == "A"]
+     f <- as.formula(paste0(c, "~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
+   }
+ } else{
+   if (c != "WTP_friedman") { # Case when the column is NOT "WTP_friedman"
+     xa_list <- c("X", "A")
+     x_list <- xa_list[!xa_list == "A"]
+     f <- as.formula(paste0(c, "~ A + X.1"))
+   }else{ #Friedman
+     xa_list <-  c("A", paste0("X.", 1:5))
+     x_list <- xa_list[!xa_list == "A"]
+     f <- as.formula(paste0(c, "~ A + X.1 + X.2 + X.3 + X.4 + X.5"))
+   }   
+ } 
+
       
     #FIT BART
       mb_normal <- pbart(x.train = train[, xa_list],
@@ -160,11 +139,19 @@ results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
                           init = "0")
       
     #FIT NEURAL NETWORK
-      nn_model <- nnet(f, data = bprobit_train, size = 5, decay = 0.01, maxit = 200)
+      nn_model2 <- nnet(f, data = bprobit_train, size = 2, decay = 0.01, maxit = 200)
+      nn_model3 <- nnet(f, data = bprobit_train, size = 3, decay = 0.01, maxit = 200)
+      nn_model4 <- nnet(f, data = bprobit_train, size = 4, decay = 0.01, maxit = 200)
+      nn_model5 <- nnet(f, data = bprobit_train, size = 5, decay = 0.01, maxit = 200)
       
-    #COLLECT PREDICTIONS FROM SNP MODELS 
+    #COLLECT PREDICTIONS FROM Machine Learning MODELS 
+      #BART
       tdat_long2 <- get_wtp2(pred_matrix = (1 - mb_normal$prob.test) %>% t(), test_ends = test_ends,test_notends=test_notends)
-      tdatn_long2 <- get_wtp_point(pred_vector = 1-predict(nn_model, bprobit_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      #ANN
+      tdatn2_long2 <- get_wtp_point(pred_vector = 1-predict(nn_model2, bprobit_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      tdatn3_long2 <- get_wtp_point(pred_vector = 1-predict(nn_model3, bprobit_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      tdatn4_long2 <- get_wtp_point(pred_vector = 1-predict(nn_model4, bprobit_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      tdatn5_long2 <- get_wtp_point(pred_vector = 1-predict(nn_model5, bprobit_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
       
       coefs <- coef(probit)
       WTP_logit <- -coefs["(Intercept)"] / coefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-coefs[x_list] / coefs["A"])
@@ -176,19 +163,25 @@ results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
       all <- data.frame(data = test.wtp[, c],
                         data_name = gsub("WTP_", "", c),
                         bart_q = tdat_long2$wtp_q,
-                        nn_q = tdatn_long2$wtp_q,
+                        nn2_q = tdatn2_long2$wtp_q,
+                        nn3_q = tdatn3_long2$wtp_q,
+                        nn4_q = tdatn4_long2$wtp_q,
+                        nn5_q = tdatn5_long2$wtp_q,
                         probit = WTP_logit,
                         bprobit = WTP_bprobit)
       
       results <- data.frame(bart_q = mean((tdat_long2$wtp_q - test.wtp[, c])^2)^0.5,
-                            nn_q = mean((tdatn_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                            nn2_q = mean((tdatn2_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                            nn3_q = mean((tdatn3_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                            nn4_q = mean((tdatn4_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                            nn5_q = mean((tdatn5_long2$wtp_q - test.wtp[, c])^2)^0.5,
                             probit = mean((WTP_logit - test.wtp[, c])^2)^0.5,
                             bprobit = mean((WTP_bprobit - test.wtp[, c])^2)^0.5,
                             data = gsub("WTP_", "", c),
                             rep = r)
     
     
-    # Return the list for the current c and r
+
     list(all = all, results = results)
   }
 

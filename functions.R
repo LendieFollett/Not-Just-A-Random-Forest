@@ -101,11 +101,6 @@ get_wtp2 <- function(pred_matrix, test_ends,test_notends){
   
 
   
-  #tdat_long <- tdat %>% 
-    #select(-starts_with("Rep")) %>% 
-   # melt(id.vars = c("ID", "A"))# %>% 
-  #filter(!is.na(hh_income))
-  
   tdat_long <- tdat %>%
     pivot_longer(cols = starts_with("diff_Rep"), names_to = "variable", values_to = "value")
   
@@ -116,7 +111,7 @@ get_wtp2 <- function(pred_matrix, test_ends,test_notends){
     mutate(CDF = c(1,1-cumsum(value))[-length(value)]) %>%
     summarise(#wtp_t = sum(A*value, na.rm=TRUE)/sum(value, na.rm=TRUE),
               #wtp_sk =sum(.5*(A + lag(A))*pmax(value_m,0), na.rm=TRUE)/sum(pmax(value_m,0), na.rm=TRUE) ,
-              wtp_q = integrate(approxfun(A[!is.na(CDF)],CDF[!is.na(CDF)]), 0, 175)$value) %>% 
+              wtp_q = integrate(approxfun(A[!is.na(CDF)],CDF[!is.na(CDF)]), 0, 150)$value) %>% 
     ungroup %>% 
     group_by(ID) %>% 
     summarise(#wtp_t = mean(wtp_t),
@@ -195,7 +190,7 @@ get_wtp_point <- function(pred_vector, test_ends,test_notends){
     mutate(CDF = c(1,1-cumsum(value))[-length(value)]) %>%
     summarise(wtp_t = sum(A*value, na.rm=TRUE)/sum(value, na.rm=TRUE),
               #wtp_sk =sum(.5*(A + lag(A))*pmax(value_m,0), na.rm=TRUE)/sum(pmax(value_m,0), na.rm=TRUE) ,
-              wtp_q = integrate(approxfun(A[!is.na(CDF)],CDF[!is.na(CDF)]), 0, 175)$value) %>% 
+              wtp_q = integrate(approxfun(A[!is.na(CDF)],CDF[!is.na(CDF)]), 0, 150)$value) %>% 
     ungroup %>% 
     group_by(ID) %>% 
     summarise(wtp_t = mean(wtp_t),
