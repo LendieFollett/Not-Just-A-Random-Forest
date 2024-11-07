@@ -75,7 +75,7 @@ get_wtp2 <- function(pred_matrix, test_ends,test_notends){
   max_pts <- max(pts)
   
   # Create a matrix instead of repeatedly assigning NA columns
-  test_ends[paste0("Rep", 1:1000)] <- as.numeric(test_ends$A == max_pts)
+  test_ends[paste0("Rep", 1:1000)] <- as.numeric(!test_ends$A == max_pts)
   
   pred_matrix2 <- data.frame(pred_matrix) 
   colnames(pred_matrix2) <- gsub("X", "Rep", colnames(pred_matrix2))
@@ -88,39 +88,30 @@ get_wtp2 <- function(pred_matrix, test_ends,test_notends){
   tdat <-testb %>%
     rbind(test_ends) %>% #tack on endpoints
     group_by(ID) %>% 
-    arrange(ID, desc(A)) %>% 
-    # calculate differences in consecutive probabilities
-    # (some will be negative, that is taken care of below)
+    arrange(ID, (A)) %>% 
     mutate(across(starts_with("Rep"), ~  pava(.x, decreasing=TRUE))) %>% 
-    mutate(across(starts_with("Rep"), ~  lag(.)- ., .names = "diff_{col}")) %>% 
+    ungroup() %>% 
     arrange(ID, A)
   
-  #View(tdat[,c(1:3,9,1009)])
+ # View(tdat[,c(1:3,13,1013)])
 
-  tdat <- tdat %>% select("ID", "A",paste0("diff_Rep", 1:1000))
+  tdat <- tdat %>% select("ID", "A",paste0("Rep", 1:1000))
   
 
   
   tdat_long <- tdat %>%
-    pivot_longer(cols = starts_with("diff_Rep"), names_to = "variable", values_to = "value")
+    pivot_longer(cols = starts_with("Rep"), names_to = "variable", values_to = "value")
   
   #calculate weighted sum
   #for negative differences (non-monotonicity), give a value of 0
   tdat_long2 <- tdat_long%>% 
     group_by(ID,variable) %>% #hh_income, variable, age
-    mutate(CDF = c(1,1-cumsum(value))[-length(value)]) %>%
-    summarise(#wtp_t = sum(A*value, na.rm=TRUE)/sum(value, na.rm=TRUE),
-              #wtp_sk =sum(.5*(A + lag(A))*pmax(value_m,0), na.rm=TRUE)/sum(pmax(value_m,0), na.rm=TRUE) ,
-              wtp_q = integrate(approxfun(A[!is.na(CDF)],CDF[!is.na(CDF)]), 0, 150)$value) %>% 
+    #mutate(CDF = c(1,1-cumsum(value))[-length(value)]) %>%
+    summarise(wtp_q = integrate(approxfun(A[!is.na(value)],value[!is.na(value)]), 0, 150)$value) %>% 
     ungroup %>% 
     group_by(ID) %>% 
-    summarise(#wtp_t = mean(wtp_t),
-              wtp_q = mean(wtp_q))
+    summarise(wtp_q = mean(wtp_q))
   
-  #TOMORROW: need to have CDF = 1 for A = 0. (i.e., shift the CDF values down by one row)
-  #TOMORROW: check SK computations - why is it biased downward
-  # ---> don't use SK. use quadrature instead (which is what SK wants to estimate anyway). 
- 
   return(tdat_long2)
   
 }
@@ -165,16 +156,17 @@ get_wtp_point <- function(pred_vector, test_ends,test_notends){
   tdat <-testb %>%
     rbind(test_ends) %>% #tack on endpoints
     group_by(ID) %>% 
-    arrange(ID, desc(A)) %>% 
+    arrange(ID, (A)) %>% 
     # calculate differences in consecutive probabilities
     # (some will be negative, that is taken care of below)
     mutate(across(starts_with("Rep"), ~  pava(.x, decreasing=TRUE))) %>% 
-    mutate(across(starts_with("Rep"), ~  lag(.)- ., .names = "diff_{col}")) %>% 
     arrange(ID, A)
   
   
   
-  tdat <- tdat %>% select("ID", "A",paste0("diff_Rep1"))
+  
+  
+  tdat <- tdat %>% select("ID", "A",paste0("Rep1"))
   
   
   
@@ -183,18 +175,12 @@ get_wtp_point <- function(pred_vector, test_ends,test_notends){
     melt(id.vars = c("ID", "A"))# %>% 
   #filter(!is.na(hh_income))
   
-  #calculate weighted sum
-  #for negative differences (non-monotonicity), give a value of 0
   tdat_long2 <- tdat_long%>% 
     group_by(ID,variable) %>% #hh_income, variable, age
-    mutate(CDF = c(1,1-cumsum(value))[-length(value)]) %>%
-    summarise(wtp_t = sum(A*value, na.rm=TRUE)/sum(value, na.rm=TRUE),
-              #wtp_sk =sum(.5*(A + lag(A))*pmax(value_m,0), na.rm=TRUE)/sum(pmax(value_m,0), na.rm=TRUE) ,
-              wtp_q = integrate(approxfun(A[!is.na(CDF)],CDF[!is.na(CDF)]), 0, 150)$value) %>% 
+    summarise(wtp_q = integrate(approxfun(A[!is.na(value)],CDF[!is.na(value)]), 0, 150)$value) %>% 
     ungroup %>% 
     group_by(ID) %>% 
-    summarise(wtp_t = mean(wtp_t),
-              wtp_q = mean(wtp_q))
+    summarise(wtp_q = mean(wtp_q))
   
   #TOMORROW: need to have CDF = 1 for A = 0. (i.e., shift the CDF values down by one row)
   #TOMORROW: check SK computations - why is it biased downward
