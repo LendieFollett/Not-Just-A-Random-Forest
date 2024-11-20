@@ -7,6 +7,7 @@ library(foreach)
 library(doParallel)
 library(tidyr)
 library(reshape2)
+library(randomForest)
 source("functions.R")
 
 numCores <- detectCores() - 1  # Use one less than the total number of cores
@@ -37,7 +38,7 @@ results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
     sigma_2 <- 1
     #intercept 
     beta_N0 <- 90 
-    beta_linear <- 25
+    beta_linear <- 30
     
     # X_i drawn from U[-1, 1]
     X <- runif(n*nP, 0, 1) %>% matrix(ncol = nP)
@@ -96,20 +97,24 @@ results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
      xa_list <- c("X.1", "A")
      x_list <- xa_list[!xa_list == "A"]
      f <- as.formula(paste0(c, "~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
+     f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
    }else{ #Friedman
      xa_list <-  c("A", paste0("X.", 1:10))
      x_list <- xa_list[!xa_list == "A"]
      f <- as.formula(paste0(c, "~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
+     f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
    }
  } else{
    if (c != "WTP_friedman") { # Case when the column is NOT "WTP_friedman"
      xa_list <- c("X.1", "A")
      x_list <- xa_list[!xa_list == "A"]
      f <- as.formula(paste0(c, "~ A + X.1"))
+     f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1"))
    }else{ #Friedman
      xa_list <-  c("A", paste0("X.", 1:5))
      x_list <- xa_list[!xa_list == "A"]
      f <- as.formula(paste0(c, "~ A + X.1 + X.2 + X.3 + X.4 + X.5"))
+     f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1 + X.2 + X.3 + X.4 + X.5"))
    }   
  } 
 
@@ -118,19 +123,30 @@ results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
       mb_normal <- pbart(x.train = train[, xa_list],
                          y.train = train[, c],
                          x.test = test_notends[, xa_list],
-                         ntree = 250,
+                         ntree = 100,
                          ndpost = 1000, nskip = 3000)
       
-      #FIT RF
-      rf <- randomForest(f,
-                         data = train)
       
 
       bprobit_train <- train %>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
       bprobit_test <- test %>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
       bprobit_test_ends <- test_ends%>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
       bprobit_test_notends <- test_notends%>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
+     
       
+      n_train <- train %>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
+      n_train$A <- (n_train$A - mean(A))/sd(A)
+      n_test <- test %>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
+      n_test$A <- (n_test$A - mean(A))/sd(A)
+      n_test_ends <- test_ends%>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
+      n_test_ends$A <- (n_test_ends$A - mean(A))/sd(A)
+      n_test_notends <- test_notends%>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
+      n_test_notends$A <- (n_test_notends$A - mean(A))/sd(A)
+      #FIT RF
+      rf <- randomForest(f_rf,
+                         data = bprobit_train,
+                         ntree = 1000,
+                         type = "class") 
      #FIT TRADITIONAL PROBIT 
       probit <- glm(f, data = bprobit_train, family = binomial(link = "probit"))
      #FIT BAYESIAN PROBIT 
@@ -143,21 +159,31 @@ results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
                           init = "0")
       
     #FIT NEURAL NETWORK
-      nn_model2 <- nnet(f, data = bprobit_train, size = 2, decay = 0.01, maxit = 200)
-      nn_model3 <- nnet(f, data = bprobit_train, size = 3, decay = 0.01, maxit = 200)
-      nn_model4 <- nnet(f, data = bprobit_train, size = 4, decay = 0.01, maxit = 200)
-      nn_model5 <- nnet(f, data = bprobit_train, size = 5, decay = 0.01, maxit = 200)
+      nn_model2 <- nnet(f, data = n_train, size = 2, maxit = 1000)
+      nn_model3 <- nnet(f, data = n_train, size = 3, maxit = 1000)
+      nn_model4 <- nnet(f, data = n_train, size = 4, maxit = 1000)
+      nn_model5 <- nnet(f, data = n_train, size = 5, maxit = 1000)
+      nn_model6 <- nnet(f, data = n_train, size = 6, maxit = 1000)
+      nn_model7 <- nnet(f, data = n_train, size = 7, maxit = 1000)
+      nn_model8 <- nnet(f, data = n_train, size = 8, maxit = 1000)
+      nn_model9 <- nnet(f, data = n_train, size = 9, maxit = 1000)
       
     #COLLECT PREDICTIONS FROM Machine Learning MODELS 
       #BART
       tdat_long2 <- get_wtp2(pred_matrix = mb_normal$prob.test %>% t(), test_ends = test_ends,test_notends=test_notends)
+      
       #ANN
-      tdatn2_long2 <- get_wtp_point(pred_vector = 1-predict(nn_model2, bprobit_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
-      tdatn3_long2 <- get_wtp_point(pred_vector = 1-predict(nn_model3, bprobit_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
-      tdatn4_long2 <- get_wtp_point(pred_vector = 1-predict(nn_model4, bprobit_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
-      tdatn5_long2 <- get_wtp_point(pred_vector = 1-predict(nn_model5, bprobit_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      tdatn2_long2 <- get_wtp_point(pred_vector = predict(nn_model2, n_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      tdatn3_long2 <- get_wtp_point(pred_vector = predict(nn_model3, n_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      tdatn4_long2 <- get_wtp_point(pred_vector = predict(nn_model4, n_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      tdatn5_long2 <- get_wtp_point(pred_vector = predict(nn_model5, n_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      tdatn6_long2 <- get_wtp_point(pred_vector = predict(nn_model6, n_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      tdatn7_long2 <- get_wtp_point(pred_vector = predict(nn_model7, n_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      tdatn8_long2 <- get_wtp_point(pred_vector = predict(nn_model8, n_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      tdatn9_long2 <- get_wtp_point(pred_vector = predict(nn_model9, n_test_notends, type = "raw"), test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      
       #RANDOM FOREST
-      tdatrf_long2 <- get_wtp_point(pred_vector = predict(rf, bprobit_test_notends, type = "prob")[,1], test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      tdatrf_long2 <- get_wtp_point(pred_vector = predict(rf, bprobit_test_notends, type = "prob")[,"1"], test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
       
       coefs <- coef(probit)
       WTP_logit <- -coefs["(Intercept)"] / coefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-coefs[x_list] / coefs["A"])
@@ -173,6 +199,7 @@ results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
                         nn3_q = tdatn3_long2$wtp_q,
                         nn4_q = tdatn4_long2$wtp_q,
                         nn5_q = tdatn5_long2$wtp_q,
+                        rf = tdatrf_long2$wtp_q,
                         probit = WTP_logit,
                         bprobit = WTP_bprobit)
       
@@ -181,6 +208,11 @@ results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
                             nn3_q = mean((tdatn3_long2$wtp_q - test.wtp[, c])^2)^0.5,
                             nn4_q = mean((tdatn4_long2$wtp_q - test.wtp[, c])^2)^0.5,
                             nn5_q = mean((tdatn5_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                            nn6_q = mean((tdatn6_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                            nn7_q = mean((tdatn7_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                            nn8_q = mean((tdatn8_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                            nn9_q = mean((tdatn9_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                            rf_q = mean((tdatrf_long2$wtp_q - test.wtp[, c])^2)^0.5,
                             probit = mean((WTP_logit - test.wtp[, c])^2)^0.5,
                             bprobit = mean((WTP_bprobit - test.wtp[, c])^2)^0.5,
                             data = gsub("WTP_", "", c),
@@ -195,19 +227,37 @@ results <- foreach(c = datasets, .packages = c('BART', 'rstanarm')) %:%
 all_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$all))))
 results_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$results))))
 
+sparsity = TRUE
 saveRDS(all_combined, paste0("all_combined_",sparsity,".RDS"))
 saveRDS(results_combined, paste0("results_combined_",sparsity,".RDS"))
 
 
-results_combined %>% group_by(data) %>% 
+
+results_combinedTRUE <- readRDS( paste0("results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
+results_combinedFALSE <- readRDS( paste0("results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
+
+rbind(results_combinedTRUE,results_combinedFALSE) %>% 
+  group_by(kind, data) %>% 
   summarise(bart_q = mean(bart_q)/mean(probit),
             nn2_q = mean(nn2_q)/mean(probit),
             nn3_q = mean(nn3_q)/mean(probit),
             nn4_q = mean(nn4_q)/mean(probit),
             nn5_q = mean(nn5_q)/mean(probit),
+            nn6_q = mean(nn6_q)/mean(probit),
+            nn7_q = mean(nn7_q)/mean(probit),
+            nn8_q = mean(nn8_q)/mean(probit),
+            nn9_q = mean(nn9_q)/mean(probit),
+            rf = mean(rf_q)/mean(probit),
             bprobit = mean(bprobit)/mean(probit)
-            ) #%>% 
- # xtable()
+            ) %>% 
+  ungroup() %>% 
+  rowwise() %>% t() %>% 
+  #mutate(across(
+  #  bart_q:bprobit,
+  #  ~ ifelse(. == min(c_across(bart_q:bprobit)), paste0("\\textbf{", . , "}"), .)
+  #)) %>% 
+  xtable(escape = FALSE)
+
 
 
 results_combined %>% 
@@ -230,8 +280,8 @@ results_combined %>%
 
 
 ggplot() + 
-  geom_point(aes(y=nn3_q, x=data), 
-             data = filter(all_combined, data_name == "friedman")) + 
+  geom_point(aes(y=nn5_q, x=data), 
+             data = filter(all_combined, data_name == "normal")) + 
   geom_abline(aes(slope = 1, intercept = 0)) +
   labs(x = "True WTP", y = "Predicted WTP")
 

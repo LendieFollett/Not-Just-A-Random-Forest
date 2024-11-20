@@ -7,7 +7,7 @@ get_wtp <- function(pred_matrix){
   test_ends[paste0("Rep", 1:1000)] <- NA
   
   test_ends[paste0("Rep", 1:1000)] <- lapply(test_ends[paste0("Rep", 1:1000)], function(x) {
-    ifelse(test_ends$CV_donate_bid == max(pts), 1, 0)
+    ifelse(test_ends$CV_donate_bid == max(pts), 0, 1)
   })
   
   pred_matrix2 <- data.frame(pred_matrix) 
@@ -21,51 +21,39 @@ get_wtp <- function(pred_matrix){
   tdat <-testb %>%
     rbind(test_ends) %>% #tack on endpoints
     group_by(ID) %>% 
-    arrange(ID, desc(CV_donate_bid)) %>% 
+    arrange(ID, (CV_donate_bid)) %>% 
     # calculate differences in consecutive probabilities
     # (some will be negative, that is taken care of below)
      mutate(across(starts_with("Rep"), ~  pava(.x, decreasing=TRUE))) %>% #Rep = P(said no)
-    mutate(across(starts_with("Rep"), ~  lag(.)- ., .names = "diff_{col}")) %>% 
+    #mutate(across(starts_with("Rep"), ~  lag(.)- ., .names = "diff_{col}")) %>% 
     arrange(ID, CV_donate_bid)
   
   #View(tdat[,c(1,5,1005)])
   
-  tdat <- tdat %>% select("ID", "CV_donate_bid",paste0("diff_Rep", 1:1000))
+  tdat <- tdat %>% select("ID", "CV_donate_bid",paste0("Rep", 1:1000))
   
-  
-  tdat_long <- tdat %>% 
-    #select(-starts_with("Rep")) %>% 
-    melt(id.vars = c("ID", "CV_donate_bid"))# %>% 
-  #filter(!is.na(hh_income))
-  
-  #View(tdat[,c(1:5,1000:1005)])
-  
-  #tdat_long <- tdat %>% 
-  #  select(-starts_with("Rep")) %>% 
-   # melt(id.vars = c("CV_donate_bid", "hh_income", "age", "ID")) %>% 
-    #filter(!is.na(hh_income))
+
+  tdat_long <- tdat %>%
+    pivot_longer(cols = starts_with("Rep"), names_to = "variable", values_to = "value")
   
   #calculate weighted sum
   #for negative differences (non-monotonicity), give a value of 0
-  #tdat_long2 <- tdat_long%>% 
-  #  group_by(hh_income, variable, age) %>% 
-  #  summarise(wtp = sum(CV_donate_bid*pmax(value,0), na.rm=TRUE)/sum(pmax(value,0), na.rm=TRUE)) %>% 
-  #  ungroup
-  
   tdat_long2 <- tdat_long%>% 
     group_by(ID,variable) %>% #hh_income, variable, age
-    mutate(CDF = c(1,1-cumsum(value))[-length(value)]) %>%
-    summarise(wtp_t = sum(CV_donate_bid*value, na.rm=TRUE),
-              wtp_q = integrate(approxfun(CV_donate_bid[!is.na(CDF)],CDF[!is.na(CDF)]), 0, max(CV_donate_bid))$value) 
+    #mutate(CDF = c(1,1-cumsum(value))[-length(value)]) %>%
+    summarise(wtp_q = integrate(approxfun(CV_donate_bid[!is.na(value)],value[!is.na(value)]), 0, 151)$value)# %>% 
+
+    #ungroup %>% 
+    #group_by(ID) %>% 
+    #summarise(wtp_q = mean(wtp_q))
   
   
   mean_wtp <-tdat_long2 %>% 
     ungroup %>% 
     group_by(ID) %>% 
-    summarise(wtp_t = mean(wtp_t),
-              wtp_q = mean(wtp_q))
+    summarise(wtp_q = mean(wtp_q))
   
-return(list(wtp=tdat_long2, mean_wtp))
+return(list(wtp=tdat_long2, mean_wtp = mean_wtp))
   
 }
 
@@ -144,7 +132,7 @@ get_wtp_point <- function(pred_vector, test_ends,test_notends){
   pts <- unique(test_ends$A)
   test_ends$Rep1 <- NA
   
-  test_ends$Rep1 <-ifelse(test_ends$A == max(pts), 1, 0)
+  test_ends$Rep1 <-ifelse(!test_ends$A == max(pts), 1, 0)
 
   
   testb <- test_notends %>% 
@@ -177,7 +165,7 @@ get_wtp_point <- function(pred_vector, test_ends,test_notends){
   
   tdat_long2 <- tdat_long%>% 
     group_by(ID,variable) %>% #hh_income, variable, age
-    summarise(wtp_q = integrate(approxfun(A[!is.na(value)],CDF[!is.na(value)]), 0, 150)$value) %>% 
+    summarise(wtp_q = integrate(approxfun(A[!is.na(value)],value[!is.na(value)]), 0, 150)$value) %>% 
     ungroup %>% 
     group_by(ID) %>% 
     summarise(wtp_q = mean(wtp_q))

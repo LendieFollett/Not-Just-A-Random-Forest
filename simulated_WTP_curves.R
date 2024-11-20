@@ -7,52 +7,88 @@ library(tidyr)
 
 source("functions.R")
 
+sparsity = TRUE
+r = 10
+# Load necessary data and scripts
+# Set seed for reproducibility
+set.seed(1234 + r)
 
-d <- read.csv("Maui_CV/Qualtrics_FullSample_CV.csv")
-str(d)
+# Number of observations
+n <- 1000
 
-d <- d%>%
-  select(CV_donate_yes, CV_donate_bid, hh_income, age,conservative_politics, female)
+#number of x variables
+nP <- 10
 
-d <- d[complete.cases(d),]
-#test set: each person / unique combination of demographics needs
-#to be paired with each CV_donate_bid, and then the endpoints as well
-test <- d %>%
-  select(hh_income, age,conservative_politics, female)
-  #filter(CV_donate_bid %in% c(25,100, 500, 1000, 2000))
-test <- test[complete.cases(test),]
+# standard deviation
+sigma_1 <- 10
+sigma_2 <- 1
+#intercept 
+beta_N0 <- 90 
+beta_linear <- 30
 
-# Add the new columns to the `ends` data frame
-#how to generalize this...
-pts <- c(unique(d$CV_donate_bid),c(0, 2001))
+# X_i drawn from U[-1, 1]
+X <- runif(n*nP, 0, 1) %>% matrix(ncol = nP)
+
+# Normal WTP_i = beta_N0 + beta_linear * X_i + error term (normally distributed)
+epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
+WTP_normal <- beta_N0 + beta_linear * X[,1] + epsilon_Ni
+
+#Friedman
+WTP_friedman <-  10 +  5*(10*sin(pi*X[,1]*X[,2]) + 20*(X[,3] - 0.5)^2 + 10*X[,4] + 5*X[,5]) + rnorm(n, 0, sigma_2)
+
+# Step function, normal error
+epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
+WTP_step <- beta_N0 + beta_linear * (X[,1] < 0.5) + epsilon_Ni
+
+
+# Create a data frame to store the results
+data <- data.frame(
+  WTP_normal = WTP_normal,
+  WTP_friedman = WTP_friedman, #the only one that uses X1-X5
+  WTP_step = WTP_step
+)
+c <- "WTP_friedman"
+
+# Print first few rows
+head(data)
+A <- c(25, 50, 75, 100, 125, 150)
+A_samps <- sample(A, size = nrow(data), replace=TRUE) %>% as.matrix
+
+survey <- data.frame(X = X,
+                     CV_donate_bid = A_samps,
+                     apply(data, 2, function(x){ifelse(x > A_samps, 1, 0)}))
+
+train.idx <- sample(1:nrow(survey), size = .7*nrow(survey), replace=FALSE)
+
+train <- survey[train.idx,]
+test <-survey[-train.idx,]
+test.wtp <- data[-train.idx,]
+
+pts <- c(unique(survey$CV_donate_bid),c(0, 151))
 
 
 test$ID <- 1:nrow(test)
 test2 <- test[rep(1:nrow(test), each = length(pts)),] %>% 
   mutate(CV_donate_bid = rep(pts, nrow(test)))
 
-test2 <- test2[,c("ID","CV_donate_bid", "hh_income", "age", "conservative_politics", "female")]
+test2 <- test2[,c("ID","CV_donate_bid", paste0("X.",1:10))]
 
 test_ends <- test2 %>% filter(CV_donate_bid %in% c(max(pts), min(pts)))
 test_notends <- test2 %>% filter(!CV_donate_bid %in% c(max(pts), min(pts)))
 
-p <- d %>% 
-  group_by(CV_donate_bid) %>% 
-  summarise(Pyes = mean(CV_donate_yes),
-            n = n()) %>% 
-  ggplot() + 
-  geom_line(aes(x = CV_donate_bid, y = Pyes)) +
-  scale_y_continuous(limits = c(0, .7))
+xa_list <- c("CV_donate_bid", paste0("X.", 1:10))
+x_list <- c(paste0("X.", 1:10))
 
+mb <- pbart(x.train = train[,xa_list],
+            y.train = train[,c],
+            x.test = test_notends[,xa_list],
+            ntree = 200,
+            ndpost = 1000,nskip = 5000)
 
-mb <- pbart(x.train = d[,-1],
-             y.train = d[,1],
-             x.test = test_notends[,-1],
-             ntree = 200,
-             ndpost = 1000,nskip = 5000)
+formula <- paste0(c," ~CV_donate_bid + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10")
 
-bprobit <- stan_glm(CV_donate_yes ~ CV_donate_bid + hh_income + age + female + conservative_politics, 
-                    data = d , 
+bprobit <- stan_glm( formula,
+                    data = train , 
                     family = binomial(link = "probit"), 
                     prior = normal(0, 1), 
                     prior_intercept = normal(0, 1), 
@@ -65,46 +101,24 @@ library(rstanarm)
 samps <- as.data.frame(bprobit)
 
 
-bresults <- get_wtp(pred_matrix = (1-mb$prob.test) %>%  t() )
-lrresults <- get_wtp(pred_matrix = 1-posterior_epred(bprobit,  test_notends[,-1] ) %>% t())
+bresults <- get_wtp(pred_matrix = (mb$prob.test) %>%  t() )
+#lrresults <- get_wtp(pred_matrix = posterior_epred(bprobit,  test_notends[,-1] ) %>% t())
+
+bcoefs <- as.data.frame(bprobit) %>% apply(2, mean)
+first <- as.vector(-samps["(Intercept)"] / samps["CV_donate_bid"])
+second <-  -as.matrix(test[, x_list])%*%t(apply(samps[,x_list],2, function(x){x/samps[,"CV_donate_bid"]})) 
+WTP_bprobit <- apply(second, 1, function(x){x + first})
+
+ggplot() + geom_point(aes(test.wtp[,c], bresults$mean_wtp$wtp_q)) + geom_abline(slope = 1, intercept = 0)
+ggplot() + geom_point(aes(test.wtp[,c], WTP_bprobit)) + geom_abline(slope = 1, intercept = 0)
+
+
+mean(abs(test.wtp[,c]- WTP_bprobit))
+mean(abs(test.wtp[,c]- bresults$mean_wtp$wtp_q))
 
 tdat_long2 <- bresults$wtp
-tdatlr_long2 <- lrresults$wtp
+tdatlr_long2 <- WTP_bprobit
 
-
-#BART
- tdat_long2 %>% 
-  merge(test, by = "ID") %>% 
-  filter(age <80) %>% 
-  ggplot() +
-  geom_density(aes(x = wtp_q, fill = as.factor(hh_income)), alpha = I(.5), adjust = 2) +
-  facet_grid(conservative_politics~age, scales = "free")+
-  scale_fill_brewer("Income") +
-  labs(title="BART") +
-   theme_bw()
-
-ggsave("bird_wtp_demographics.pdf")
-p1 <- tdat_long2 %>% 
-  merge(test, by = "ID") %>% 
-  filter(age <80) %>% 
-  ggplot() +
-  geom_boxplot(aes(y = wtp_q, x = as.factor(hh_income), colour = female %>% as.factor) , alpha = I(.5)) +
-  facet_wrap(~age, scales = "free")+
-  theme_bw() +
-  labs(x = "Income", y = "WTP (US $)")
-p1
-
-#LOGISTIC REGRESSION
-p2 <- tdatlr_long2 %>%
-  merge(test, by = "ID") %>% 
-  ggplot() +
-  geom_density(aes(x = wtp_q, fill = as.factor(hh_income)), alpha = I(.5)) +
-  facet_wrap(~age, scales = "free")+
-  scale_fill_brewer("Income") +
-  theme_bw()+
-  labs(title="Bayesian Logistic Regression")
-library(gridExtra)
- grid.arrange(p1,p2, ncol = 2) 
 
 
 #make demand curve
@@ -119,6 +133,10 @@ dcurveslr <- lrresults$wtp %>%
   mutate_at("wtp_q", list(quant = ~ 1-ecdf(.)(.))) %>%
   ungroup() 
 
+dcurves_true <- test.wtp %>% 
+  mutate_at("WTP_friedman", list(quant = ~ 1-ecdf(.)(.))) %>%
+  ungroup() 
+
 round_to_nearest_0.05 <- function(x) {
   round(x / 0.05) * 0.05
 }
@@ -129,7 +147,6 @@ dcurves2 <- dcurves%>%
     mean = median(wtp_q),
     quant05 = quantile(wtp_q, .05),
     quant95 = quantile(wtp_q, .95)) 
-write.csv(dcurves2, "bart_bird_demand_curve.csv")
 
 dcurveslr2 <- dcurveslr%>% 
   group_by(quant = round_to_nearest_0.05(quant)) %>% 
@@ -137,6 +154,13 @@ dcurveslr2 <- dcurveslr%>%
     mean = median(wtp_q),
     quant05 = quantile(wtp_q, .05),
     quant95 = quantile(wtp_q, .95)) 
+
+dcurvestrue2 <- dcurves_true%>% 
+  group_by(quant = round_to_nearest_0.05(quant)) %>% 
+  summarise(
+    mean = median(WTP_friedman),
+    quant05 = quantile(WTP_friedman, .05),
+    quant95 = quantile(WTP_friedman, .95)) 
 
 ggplot() +
   geom_line(aes(x = quant, y = wtp_q, group = variable), alpha = I(.1), data = dcurves) +
@@ -149,20 +173,6 @@ ggplot() +
   #geom_line(aes(x = quant, y= quant95),colour = "blue", data = dcurveslr2, linetype = 2) +
   labs(x = "P(WTP < A)", y = "WTP US $", caption = "BART = blue, probit = green") +
   theme_bw()
-ggsave("wtp_envelope.pdf")
-
-ggplot() +
-  geom_line(aes(x = quant, y = wtp_q, group = variable), alpha = I(.1), data = dcurveslr) +
-  #geom_line(aes(x = quant, y = wtp_q, group = variable), alpha = I(.15), data = dcurveslr, colour = "blue") +
-  geom_line(aes(x = quant, y= quant05),colour = "red", data = dcurveslr2, linetype = 2) +
-  geom_line(aes(x = quant, y= quant95),colour = "red", data = dcurveslr2, linetype = 2) +
-  geom_line(aes(x = quant, y= mean),colour = "red", data = dcurveslr2) +
-  labs(x = "P(WTP < A)", y = "WTP US $") +
-  theme_bw()
-ggsave("bird_wtp_mcmc.pdf")
-
-p3 <- grid.arrange(p1, p2, ncol = 2, widths = c(2,1))
-ggsave("birds_wtp_both.pdf", plot = p3)
 
 
 dcurves2lr <- dcurveslr%>% group_by(quant = round_to_nearest_0.05(quant)) %>% 
@@ -171,22 +181,22 @@ dcurves2lr <- dcurveslr%>% group_by(quant = round_to_nearest_0.05(quant)) %>%
     quant05 = quantile(wtp_q, .05),
     quant95 = quantile(wtp_q, .95))
 
-
+test.wtp
 
 ggplot() +
-  geom_line(aes(x = quant, y= mean), data = dcurves2lr, colour = "blue") +
-  geom_ribbon(aes(ymin = quant05, ymax = quant95, x= quant), alpha = .2, data = dcurves2lr, fill = "blue") +
-  geom_line(aes(x = quant, y= mean), data = dcurves2, colour = "black") +
-  geom_ribbon(aes(ymin = quant05, ymax = quant95, x= quant), alpha = .2, data = dcurves2, fill = "black") +
+  geom_line(aes(x = quant, y= mean,colour = "Probit"), data = dcurves2lr) +
+  #geom_ribbon(aes(ymin = quant05, ymax = quant95, x= quant, fill = "Probit"), alpha = .2, data = dcurves2lr) +
+  geom_line(aes(x = quant, y= mean, colour = "BART"), data = dcurves2) +
+  #geom_ribbon(aes(ymin = quant05, ymax = quant95, x= quant, fill = "BART"), alpha = .2, data = dcurves2) +
+  geom_line(aes(x = quant, y= mean,colour = "True"), data = dcurvestrue2) +
   labs(y = "WTP (US $)", x = "P(Y <= y)") + theme_bw() +
   coord_flip() +
-  scale_colour_manual(name = "Group", values = c("Group 1" = "blue", "Group 2" = "black")) +
-  scale_fill_manual(name = "Group", values = c("Group 1" = "blue", "Group 2" = "black")) +
+  scale_colour_manual(name = "Model", values = c("Probit" = "blue", "BART" = "black", "True" = "red")) +
+  scale_fill_manual(name = "Model", values = c("Probit" = "blue", "BART" = "black")) +
   labs(y = "WTP (US $)", x = "P(Y <= y)") +
-  theme_bw() +
-  coord_flip()
+  theme_bw() 
 
-ggsave("bird_wtp_envelope.pdf")
+ggsave("friedman_wtp_envelope.pdf")
 
 
 #re-do with numerical approximation to integral
@@ -198,8 +208,8 @@ ggsave("bird_wtp_envelope.pdf")
 mpr <- stan_glm(CV_donate_yes ~ CV_donate_bid + hh_income + age, 
                 data = d, 
                 family = binomial(link = "probit"), 
-               # prior = normal(0, 2.5), # Define priors
-              #  prior_intercept = normal(0, 5), 
+                # prior = normal(0, 2.5), # Define priors
+                #  prior_intercept = normal(0, 5), 
                 chains = 1, iter = 2000)
 samps <- as.data.frame(mpr)
 wtp_probit <- as.matrix(samps[,c("hh_income", "age")]/ samps[,"CV_donate_bid"]) %*% t(as.matrix(test[,c(3,4)])) 
