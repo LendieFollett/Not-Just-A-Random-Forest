@@ -17,14 +17,14 @@ numCores <- detectCores() - 1  # Use one less than the total number of cores
 cl <- makeCluster(numCores)
 registerDoParallel(cl)
 
-sigma <- c(1,2,3) 
+sigma <- c(1,2,3,4) 
 
 registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 
 results <- foreach(sigma = sigma, .packages = c('BART', 'rstanarm')) %:%
   foreach(reps = 1:5) %dopar% {
     #introduce sparsity into prediction matrix?
-    sparsity = FALSE
+    sparsity = TRUE
     r <- reps
     # Load necessary data and scripts
     # Set seed for reproducibility
@@ -37,8 +37,8 @@ results <- foreach(sigma = sigma, .packages = c('BART', 'rstanarm')) %:%
     nP <- 10
     
     # standard deviation
-    sigma_1 <- c(5,10,15)[sigma] #small, medium, large
-    sigma_2 <- c(1,3,5)[sigma]
+    sigma_1 <- c(5,7,10,15)[sigma]#c(5,10,15)[sigma] #small, medium, large
+    sigma_2 <- c(5,7,10,15)[sigma]
     #intercept 
     beta_N0 <- 90 
     beta_linear <- 30
@@ -57,12 +57,18 @@ results <- foreach(sigma = sigma, .packages = c('BART', 'rstanarm')) %:%
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
     WTP_step <- beta_N0 + beta_linear * (X[,1] < 0.5) + epsilon_Ni
     
-    
+    # Binary x's only, normal error
+    bin_beta <- c(5,10,-15,-25,10,25, 15) %>% as.matrix()
+    epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
+    X2 <- apply(X[,1:5], 2, function(x){ifelse(x > 0.5, 1, 0)})
+    WTP_bin<- beta_N0 + as.matrix(data.frame(X2, X2[,1]*X2[,2], X2[,1]*X2[,3]))%*%(bin_beta) + epsilon_Ni    
+
     # Create a data frame to store the results
     data <- data.frame(
       WTP_normal = WTP_normal,
       WTP_friedman = WTP_friedman, #the only one that uses X1-X5
-      WTP_step = WTP_step
+      WTP_step = WTP_step,
+      WTP_bin = WTP_bin
     )
     
     # Print first few rows
@@ -85,7 +91,7 @@ results <- foreach(sigma = sigma, .packages = c('BART', 'rstanarm')) %:%
     epts <- c(min(pts), max(pts))
     
     test$ID <- 1:nrow(test)
-    test.y <- test[, paste0("WTP", c("_normal", "_friedman", "_step"))]
+    test.y <- test[, paste0("WTP", c("_normal", "_friedman", "_step", "_bin"))]
     
     test2 <- test[rep(1:nrow(test), each = length(pts)),] %>%
       mutate(A = rep(pts, nrow(test)))
@@ -98,7 +104,7 @@ results <- foreach(sigma = sigma, .packages = c('BART', 'rstanarm')) %:%
     all <- list()
     results <- list()
     j = 0
-for (c in c("WTP_normal", "WTP_friedman", "WTP_step")){    
+for (c in c("WTP_normal", "WTP_friedman", "WTP_step", "WTP_bin")){    
   j = j + 1
  if (sparsity == TRUE){
      xa_list <-  c("A", paste0("X.", 1:10))
@@ -106,7 +112,7 @@ for (c in c("WTP_normal", "WTP_friedman", "WTP_step")){
      f <- as.formula(paste0(c, "~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
      f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
  } else{ #sparsity ==FALSE
-   if (c != "WTP_friedman") { # Case when the column is NOT "WTP_friedman"
+   if (! c   %in% c("WTP_friedman", "WTP_bin")) { # Case when the column is NOT "WTP_friedman"
      xa_list <- c("X.1", "A")
      x_list <- xa_list[!xa_list == "A"]
      f <- as.formula(paste0(c, "~ A + X.1"))
@@ -118,39 +124,69 @@ for (c in c("WTP_normal", "WTP_friedman", "WTP_step")){
      f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1 + X.2 + X.3 + X.4 + X.5"))
    }   
  } 
-
+if (c == "WTP_bin"){
+  train<- make_bins(train)
+  test<- make_bins(test)
+  test_ends <- make_bins(test_ends)
+  test_notends <- make_bins(test_notends)
+}
       
-      b <- pbart(x.train = train[, xa_list],
-                         y.train = train[, c],
-                         x.test = test_notends[, xa_list],
-                         ntree = 100,#cv$num_trees,
-                         k = 2,#cv$k,
-                         ndpost = 1000, 
-                         nskip = 2000)
+      #need to be standardizing test in the same way we standardize the train
+      if (!c == "WTP_bin"){
+      # Calculate training means and standard deviations for columns starting with "X"
+      train_means <- train %>%
+        summarise(across(starts_with("X"), mean))
+      train_sds <- train %>%
+        summarise(across(starts_with("X"), sd))
       
-    
-      bprobit_train <- train %>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
-      bprobit_test <- test %>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
-      bprobit_test_ends <- test_ends%>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
-      bprobit_test_notends <- test_notends%>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
-     
+      # Standardize training set
+      bprobit_train <- train %>%
+        mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
       
-      n_train <- train %>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
+      # Standardize test sets using training means and standard deviations
+      bprobit_test <- test %>%
+        mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
+      
+      bprobit_test_ends <- test_ends %>%
+        mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
+      
+      bprobit_test_notends <- test_notends %>%
+        mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
+      
+      }else{
+        bprobit_test <- test
+        bprobit_train <- train
+        bprobit_test_ends <- test_ends
+        bprobit_test_notends <- test_notends
+        
+      }   
+      
+      
+      n_train <- bprobit_train
+      n_test <- bprobit_test
+      n_test_ends <- bprobit_test_ends
+      n_test_notends <- bprobit_test_notends
+      
       n_train$A <- (n_train$A - mean(A))/sd(A)
-      n_test <- test %>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
       n_test$A <- (n_test$A - mean(A))/sd(A)
-      
-      n_test_ends <- test_ends%>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
       n_test_ends$A <- (n_test_ends$A - mean(A))/sd(A)
-      
-      n_test_notends <- test_notends%>%  mutate(across(starts_with("X"), function(x){(x - mean(x))/sd(x)}))
       n_test_notends$A <- (n_test_notends$A - mean(A))/sd(A)
       
+ 
+     #FIT BART 
+      b <- pbart(x.train = train[, xa_list],
+                 y.train = train[, c],
+                 x.test = test_notends[, xa_list],
+                 ntree = 100,#cv$num_trees,
+                 k = 2,#cv$k,
+                 ndpost = 1000, 
+                 nskip = 2000)
       #FIT RF
       rf <- randomForest(f_rf,
                          data = bprobit_train,
                          ntree = 1000,
                          type = "class") 
+      
 
      #FIT TRADITIONAL PROBIT 
       probit <- glm(f, data = bprobit_train, family = binomial(link = "probit"))
@@ -196,7 +232,7 @@ for (c in c("WTP_normal", "WTP_friedman", "WTP_step")){
       
       
       all[[j]] <- data.frame(data = c, 
-                             sigma = sigma,
+                             sigma = sigma_1,
                              data = test.wtp[, c],
                         data_name = gsub("WTP_", "", c),
                         bart_q = tdat_long2$wtp_q,
@@ -206,7 +242,7 @@ for (c in c("WTP_normal", "WTP_friedman", "WTP_step")){
                         bprobit = WTP_bprobit)
       
       results[[j]] <- data.frame(data = c,
-                                 sigma = sigma,
+                                 sigma = sigma_1,
                                  bart_q = mean((tdat_long2$wtp_q - test.wtp[, c])^2)^0.5,
                             nn2_q = mean((tdatn2_long2$wtp_q - test.wtp[, c])^2)^0.5,
                             rf_q = mean((tdatrf_long2$wtp_q - test.wtp[, c])^2)^0.5,
@@ -226,39 +262,61 @@ for (c in c("WTP_normal", "WTP_friedman", "WTP_step")){
 all_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$all))))
 results_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$results))))
 
-sparsity = FALSE
+#sparsity = FALSE
 #saveRDS(all_combined, paste0("all_combined_",sparsity,".RDS"))
 #saveRDS(results_combined, paste0("results_combined_",sparsity,".RDS"))
 
+#results_combinedTRUE <- readRDS( paste0("results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
+#results_combinedFALSE <- readRDS( paste0("results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
+# Calculate results with highlighting of the lowest point
+highlighted_points <- results_combined %>%
+  group_by(data, sigma) %>%
+  summarise(
+    bart_q = mean(bart_q) / mean(probit),
+    nn2_q = mean(nn2_q) / mean(probit),
+    rf = mean(rf_q) / mean(probit),
+    bprobit = mean(bprobit) / mean(probit)
+  ) %>%
+  mutate(data = factor(data, levels = c("WTP_normal", "WTP_friedman", "WTP_step", "WTP_bin"),
+                       labels = c("Linear", "Friedman", "Step", "Binary"))) %>%
+  pivot_longer(cols = c(bart_q, nn2_q, rf), names_to = "model", values_to = "value") %>%
+  group_by(data, sigma) %>%
+  filter(value == min(value)) %>% # Filter for the minimum value for each sigma and data combination
+  ungroup()
 
+# COMPARING RMSE - need to also look at bias
+results_combined %>%
+  group_by(data, sigma) %>%
+  summarise(
+    bart_q = mean(bart_q) / mean(probit),
+    nn2_q = mean(nn2_q) / mean(probit),
+    rf = mean(rf_q) / mean(probit),
+    bprobit = mean(bprobit) / mean(probit)
+  ) %>%
+  ungroup() %>%
+  mutate(data = factor(data, levels = c("WTP_normal", "WTP_friedman", "WTP_step", "WTP_bin"),
+                       labels = c("Linear", "Friedman", "Step", "Binary"))) %>%
+  ggplot() +
+  geom_line(aes(x = sigma, y = bart_q, colour = "BART")) +
+  geom_line(aes(x = sigma, y = nn2_q, colour = "NN")) +
+  geom_line(aes(x = sigma, y = rf, colour = "RF")) +
+  geom_point(aes(x = sigma, y = bart_q, colour = "BART")) +
+  geom_point(aes(x = sigma, y = nn2_q, colour = "NN")) +
+  geom_point(aes(x = sigma, y = rf, colour = "RF")) +
+  geom_hline(aes(yintercept = 1, colour = "Probit"), linetype = 2) +
+  geom_point(data = highlighted_points, 
+             aes(x = sigma, y = value, colour = model), 
+             size = 4, shape = 1) + # Highlighted points
+  facet_wrap(~data, nrow = 3) +
+  scale_color_manual(
+    name = "Model", # Legend title
+    values = c("BART" = "grey10", "NN" = "grey50", "RF" = "grey80", "Probit" = "grey"),
+    breaks = c("BART", "NN", "RF", "Probit")
+  ) +
+  theme_bw() +
+  labs(x = expression(sigma[epsilon]), y = "RMSE Ratio\n(relative to Probit)")
 
-results_combinedTRUE <- readRDS( paste0("results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
-results_combinedFALSE <- readRDS( paste0("results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
-
-results_combined %>% 
-  group_by( data) %>% 
-  summarise(bart_q = mean(bart_q)/mean(probit),
-            nn2_q = mean(nn2_q)/mean(probit),
-            rf = mean(rf_q)/mean(probit),
-            bprobit = mean(bprobit)/mean(probit)
-  ) %>% 
-  ungroup() %>% 
-  rowwise() %>% t() 
-
-rbind(results_combinedTRUE,results_combinedFALSE) %>% 
-  group_by(kind, data) %>% 
-  summarise(bart_q = mean(bart_q)/mean(probit),
-            nn2_q = mean(nn2_q)/mean(probit),
-            rf = mean(rf_q)/mean(probit),
-            bprobit = mean(bprobit)/mean(probit)
-            ) %>% 
-  ungroup() %>% 
-  rowwise() %>% t() %>% 
-  #mutate(across(
-  #  bart_q:bprobit,
-  #  ~ ifelse(. == min(c_across(bart_q:bprobit)), paste0("\\textbf{", . , "}"), .)
-  #)) %>% 
-  xtable(escape = FALSE)
+ggsave("RMSE_ratios_sparse.pdf")
 
 
 
@@ -272,13 +330,13 @@ results_combined %>%
 
 
 
-results_combined %>%
-  melt(id.vars = c("data", "rep", "kind")) %>% 
+results_combined[,-8]%>%
+  melt(id.vars = c("data", "rep", "sigma")) %>% 
   #filter(!grepl("bp", variable)) %>% 
   ggplot() +
-  geom_boxplot(aes(x = variable, y = value, colour = variable)) +
-  facet_wrap(~data, scales = "free_y", ncol = 1) +
-  labs(x = "Model", y = "RMSE")
+  geom_boxplot(aes(x = factor(sigma), y = value, colour = variable)) +
+  facet_wrap(data~., scales = "free_y") +
+  labs(x = "Sigma", y = "RMSE")
 
 
 ggplot() + 
@@ -293,4 +351,49 @@ ggplot() +
   geom_point(aes(y=survey$WTP_friedman, x=tdat_long2$wtp_q)) + 
   geom_abline(aes(slope = 1, intercept = 0)) +
   labs(x = "True WTP", y = "Predicted WTP")
+
+
+##########
+# in terms of WTP Dollars - differences
+
+all_summarised <- all_combined %>% 
+  arrange(data, sigma) %>% 
+  group_by(data, sigma) %>% 
+  mutate(rep = rep(1:5, each = 300)) %>% 
+  group_by(data, sigma, rep) %>% 
+  summarise(bart_q = median(bart_q),
+            nn2_q = median(nn2_q),
+            rf = median(rf),
+            probit = median(probit),
+            true = median(data.1)) %>% 
+  ungroup() %>% 
+  melt(id.vars = c("data", "sigma", "rep", "true")) 
+all_summarised <- all_combined %>% 
+  arrange(data, sigma) %>% 
+  group_by(data, sigma) %>% 
+  mutate(rep = rep(1:5, each = 300)) %>% 
+  group_by(data, sigma, rep) %>% 
+  summarise(bart_q = quantile(bart_q,.25),
+            nn2_q = quantile(nn2_q,.25),
+            rf = quantile(rf,.25),
+            probit = quantile(probit,.25),
+            true = quantile(data.1,.25)) %>% 
+  ungroup() %>% 
+  melt(id.vars = c("data", "sigma", "rep", "true")) 
+
+
+all_summarised%>% 
+  ggplot() +
+  geom_point(aes(x = true, y = value, colour = sigma)) +
+  facet_grid(variable~data, scales = "free_x") +
+  geom_abline(aes(slope = 1, intercept = 0)) +
+  labs(x = "True Median WTP", y = "Predicted Median WTP")
+  
+
+all_summarised %>% 
+  group_by(data, sigma, variable) %>% 
+  summarise(mad = mean(abs(true - value)/value)) %>% 
+  ggplot()+
+  geom_col(aes(x = data, y = mad, fill =variable ), position = "dodge")
+
 

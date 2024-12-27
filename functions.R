@@ -182,3 +182,10 @@ get_wtp_point <- function(pred_vector, test_ends,test_notends){
   return(tdat_long2)
   
 }
+
+make_bins <- function(df){
+  df <- df %>%
+    mutate(across(starts_with("X."), ~ ifelse(. > 0.5, 1, 0)))
+  return(df)
+}
+
