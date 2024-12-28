@@ -58,7 +58,7 @@ get_wtp2 <- function(pred_matrix, test_ends,test_notends){
   max_pts <- max(pts)
   print("first")
   # Create a matrix instead of repeatedly assigning NA columns
-  test_ends[paste0("Rep", 1:1000)] <- as.numeric(!test_ends$A == max_pts)
+  test_ends[paste0("Rep", 1:ndpost)] <- as.numeric(!test_ends$A == max_pts)
   
   pred_matrix2 <- data.frame(pred_matrix) 
   colnames(pred_matrix2) <- gsub("X", "Rep", colnames(pred_matrix2))
@@ -78,7 +78,7 @@ get_wtp2 <- function(pred_matrix, test_ends,test_notends){
   print("fourth")
  # View(tdat[,c(1:3,13,1013)])
 
-  tdat <- tdat %>% select("ID", "A",paste0("Rep", 1:1000))
+  tdat <- tdat %>% select("ID", "A",paste0("Rep", 1:ndpost))
   
   print("fifth")
   

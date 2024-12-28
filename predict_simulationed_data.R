@@ -30,7 +30,7 @@ results <- foreach(sigma = sigma, .packages = c('BART', 'rstanarm')) %:%
     # Set seed for reproducibility
     set.seed(1234 + r)
     
-    # Number of observations
+    # Number of observations (sample size)
     n <- 1000
     
     #number of x variables
@@ -172,25 +172,69 @@ if (c == "WTP_bin"){
       n_test_ends$A <- (n_test_ends$A - mean(A))/sd(A)
       n_test_notends$A <- (n_test_notends$A - mean(A))/sd(A)
       
- 
-     #FIT BART 
+      ################################################################
+      #FIT BART
+      ################################################################
+      ndpost = 2000
       b <- pbart(x.train = train[, xa_list],
                  y.train = train[, c],
                  x.test = test_notends[, xa_list],
-                 ntree = 100,#cv$num_trees,
+                 ntree = 200,#cv$num_trees,
                  k = 2,#cv$k,
-                 ndpost = 1000, 
+                 ndpost = ndpost, 
                  nskip = 2000)
+      
+      # 1. Fit logistic regression on the BART (uncalibrated) probabilities
+      b_probs1 <- b$prob.train.mean
+      calibration_model <- logistf(bprobit_train[,c] ~ b_probs1, family = binomial(link = "logit"),
+                                   plcontrol = logistpl.control(maxit=1000))
+      
+      #make empty matrix
+      b_probs_cali <- matrix(ncol = nrow(bprobit_test_notends), nrow = ndpost)
+      #fill row by row
+      for (i in 1:ndpost){
+        print(i)
+      #3. Calibrate probabilities
+      b_probs_cali[i,] <- predict(calibration_model, data.frame(b_probs1=b$prob.test[i,]),type = "response")
+      }
+      
+      
+      #BART
+      tdat_long2 <- get_wtp2(pred_matrix = b_probs_cali %>% t(),#,b$prob.test %>% t(),#dim = 1000 x 1800
+                             test_ends = test_ends,
+                             test_notends=test_notends)
+      #tdat_long2_uncali <- get_wtp2(pred_matrix = b$prob.test %>% t(),#dim = 1000 x 1800
+      #                       test_ends = test_ends,
+      #                       test_notends=test_notends)
+      ################################################################
       #FIT RF
+      ################################################################
       rf <- randomForest(f_rf,
                          data = bprobit_train,
                          ntree = 1000,
                          type = "class") 
+      # 1. Fit logistic regression on the random forest (uncalibrated) probabilities
+      rf_probs1 <- predict(rf, bprobit_train, type = "prob")[,"1"]
+      calibration_model <- logistf(bprobit_train[,c] ~ rf_probs1, family = binomial(link = "logit"),
+                                   plcontrol = logistpl.control(maxit=1000))
       
-
-     #FIT TRADITIONAL PROBIT 
+      #2. Obtain uncalibrated "probabilities" from rf model on the test set
+      rf_probs2 <- predict(rf, bprobit_test_notends, type = "prob")[,"1"]
+      
+      #3. Calibrate probabilities
+      rf_probs_cali <- predict(calibration_model, data.frame(rf_probs1=rf_probs2),type = "response")
+      tdatrf_long2 <- get_wtp_point(pred_vector = rf_probs_cali, test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      
+      ################################################################ 
+      #FIT TRADITIONAL PROBIT 
+      ################################################################ 
       probit <- glm(f, data = bprobit_train, family = binomial(link = "probit"))
+      coefs <- coef(probit)
+      WTP_logit <- -coefs["(Intercept)"] / coefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-coefs[x_list] / coefs["A"])
+      
+      ################################################################  
      #FIT BAYESIAN PROBIT 
+      ################################################################ 
       bprobit <- stan_glm(f, 
                              data = bprobit_train , 
                              family = binomial(link = "probit"), 
@@ -199,7 +243,12 @@ if (c == "WTP_bin"){
                              chains = 1, iter = 2000,
                           init = "0")
       
+      bcoefs <- as.data.frame(bprobit) %>% apply(2, mean)
+      WTP_bprobit <- -bcoefs["(Intercept)"] / bcoefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-bcoefs[x_list] / bcoefs["A"]) 
+      
+    ################################################################
     #FIT NEURAL NETWORK
+      ################################################################ 
       # Define the tuning grid
       tune_grid <- expand.grid(size = c(2, 4, 6, 8),   # Number of hidden units
                                decay = c(0.01, 0.1, 0.5)) # Regularization parameter
@@ -212,24 +261,11 @@ if (c == "WTP_bin"){
                           trControl = trainControl(method = "cv", number = 5),
                           trace = FALSE)
       
-    #COLLECT PREDICTIONS FROM Machine Learning MODELS 
-      #BART
-      tdat_long2 <- get_wtp2(pred_matrix = b$prob.test %>% t(),
-                             test_ends = test_ends,
-                             test_notends=test_notends)
-      
       #ANN
       tdatn2_long2 <- get_wtp_point(pred_vector = predict(nnet_model, n_test_notends, type = "prob")[,"1"], test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      
+      ################################################################
 
-      #RANDOM FOREST
-      tdatrf_long2 <- get_wtp_point(pred_vector = predict(rf, bprobit_test_notends, type = "prob")[,"1"], test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
-      
-      coefs <- coef(probit)
-      WTP_logit <- -coefs["(Intercept)"] / coefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-coefs[x_list] / coefs["A"])
-      
-      bcoefs <- as.data.frame(bprobit) %>% apply(2, mean)
-      WTP_bprobit <- -bcoefs["(Intercept)"] / bcoefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-bcoefs[x_list] / bcoefs["A"]) 
-      
       
       all[[j]] <- data.frame(data = c, 
                              sigma = sigma_1,
@@ -368,32 +404,38 @@ all_summarised <- all_combined %>%
             true = median(data.1)) %>% 
   ungroup() %>% 
   melt(id.vars = c("data", "sigma", "rep", "true")) 
+
+
+q <- .5
 all_summarised <- all_combined %>% 
   arrange(data, sigma) %>% 
   group_by(data, sigma) %>% 
   mutate(rep = rep(1:5, each = 300)) %>% 
   group_by(data, sigma, rep) %>% 
-  summarise(bart_q = quantile(bart_q,.25),
-            nn2_q = quantile(nn2_q,.25),
-            rf = quantile(rf,.25),
-            probit = quantile(probit,.25),
-            true = quantile(data.1,.25)) %>% 
+  summarise(bart_q = quantile(bart_q,q) %>% as.numeric(),
+            nn2_q = quantile(nn2_q,q)%>% as.numeric(),
+            rf = quantile(rf,q)%>% as.numeric(),
+            probit = quantile(probit,q)%>% as.numeric(),
+            true = quantile(data.1,q)%>% as.numeric()) %>% 
   ungroup() %>% 
   melt(id.vars = c("data", "sigma", "rep", "true")) 
 
 
 all_summarised%>% 
+  filter(data == "WTP_step") %>% 
   ggplot() +
   geom_point(aes(x = true, y = value, colour = sigma)) +
-  facet_grid(variable~data, scales = "free_x") +
+  facet_wrap(variable~.) +
   geom_abline(aes(slope = 1, intercept = 0)) +
+  coord_equal()+
   labs(x = "True Median WTP", y = "Predicted Median WTP")
   
 
 all_summarised %>% 
   group_by(data, sigma, variable) %>% 
-  summarise(mad = mean(abs(true - value)/value)) %>% 
+  summarise(mad = mean(abs(true - value))) %>% 
   ggplot()+
-  geom_col(aes(x = data, y = mad, fill =variable ), position = "dodge")
+  geom_col(aes(x = data, y = mad, fill =variable ), position = "dodge") + 
+  facet_wrap(~sigma, ncol = 1)
 
 
