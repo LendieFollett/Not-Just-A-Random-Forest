@@ -18,27 +18,33 @@ cl <- makeCluster(numCores)
 registerDoParallel(cl)
 
 sigma <- c(1,2,3,4) 
+n <- c(1500, 715)
+
+comb <- expand.grid(sigma,n) %>% mutate(keep = paste0(Var1, Var2)) %>% pull(keep)
 
 registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 
-results <- foreach(sigma = sigma, .packages = c('BART', 'rstanarm')) %:%
+results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
   foreach(reps = 1:5) %dopar% {
     #introduce sparsity into prediction matrix?
     sparsity = TRUE
+    
+    #error variance
+    sigma <- as.numeric(substr(comb, 1, 1))
+    sigma_1 <- c(5,7,10,15)[sigma]#c(5,10,15)[sigma] #small, medium, large
+    sigma_2 <- c(5,7,10,15)[sigma]
+    
+    # Number of observations (sample size)
+    n <- as.numeric(substr(comb, 2, 6))
+    
     r <- reps
     # Load necessary data and scripts
     # Set seed for reproducibility
-    set.seed(1234 + r)
-    
-    # Number of observations (sample size)
-    n <- 1000
+    set.seed(r*sigma_1*n + n + sigma_1 + r)
     
     #number of x variables
     nP <- 10
-    
-    # standard deviation
-    sigma_1 <- c(5,7,10,15)[sigma]#c(5,10,15)[sigma] #small, medium, large
-    sigma_2 <- c(5,7,10,15)[sigma]
+  
     #intercept 
     beta_N0 <- 90 
     beta_linear <- 30
@@ -62,7 +68,7 @@ results <- foreach(sigma = sigma, .packages = c('BART', 'rstanarm')) %:%
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
     X2 <- apply(X[,1:5], 2, function(x){ifelse(x > 0.5, 1, 0)})
     WTP_bin<- beta_N0 + as.matrix(data.frame(X2, X2[,1]*X2[,2], X2[,1]*X2[,3]))%*%(bin_beta) + epsilon_Ni    
-
+    
     # Create a data frame to store the results
     data <- data.frame(
       WTP_normal = WTP_normal,
@@ -85,7 +91,7 @@ results <- foreach(sigma = sigma, .packages = c('BART', 'rstanarm')) %:%
     train <- survey[train.idx,]
     test <-survey[-train.idx,]
     test.wtp <- data[-train.idx,]
-
+    
     # Set up data and test points
     pts <- c(A, c(0, 151))
     epts <- c(min(pts), max(pts))
@@ -104,55 +110,55 @@ results <- foreach(sigma = sigma, .packages = c('BART', 'rstanarm')) %:%
     all <- list()
     results <- list()
     j = 0
-for (c in c("WTP_normal", "WTP_friedman", "WTP_step", "WTP_bin")){    
-  j = j + 1
- if (sparsity == TRUE){
-     xa_list <-  c("A", paste0("X.", 1:10))
-     x_list <- xa_list[!xa_list == "A"]
-     f <- as.formula(paste0(c, "~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
-     f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
- } else{ #sparsity ==FALSE
-   if (! c   %in% c("WTP_friedman", "WTP_bin")) { # Case when the column is NOT "WTP_friedman"
-     xa_list <- c("X.1", "A")
-     x_list <- xa_list[!xa_list == "A"]
-     f <- as.formula(paste0(c, "~ A + X.1"))
-     f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1"))
-   }else{ #Friedman
-     xa_list <-  c("A", paste0("X.", 1:5))
-     x_list <- xa_list[!xa_list == "A"]
-     f <- as.formula(paste0(c, "~ A + X.1 + X.2 + X.3 + X.4 + X.5"))
-     f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1 + X.2 + X.3 + X.4 + X.5"))
-   }   
- } 
-if (c == "WTP_bin"){
-  train<- make_bins(train)
-  test<- make_bins(test)
-  test_ends <- make_bins(test_ends)
-  test_notends <- make_bins(test_notends)
-}
+    for (c in c("WTP_normal", "WTP_friedman", "WTP_step", "WTP_bin")){    
+      j = j + 1
+      if (sparsity == TRUE){
+        xa_list <-  c("A", paste0("X.", 1:10))
+        x_list <- xa_list[!xa_list == "A"]
+        f <- as.formula(paste0(c, "~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
+        f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
+      } else{ #sparsity ==FALSE
+        if (! c   %in% c("WTP_friedman", "WTP_bin")) { # Case when the column is NOT "WTP_friedman"
+          xa_list <- c("X.1", "A")
+          x_list <- xa_list[!xa_list == "A"]
+          f <- as.formula(paste0(c, "~ A + X.1"))
+          f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1"))
+        }else{ #Friedman
+          xa_list <-  c("A", paste0("X.", 1:5))
+          x_list <- xa_list[!xa_list == "A"]
+          f <- as.formula(paste0(c, "~ A + X.1 + X.2 + X.3 + X.4 + X.5"))
+          f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1 + X.2 + X.3 + X.4 + X.5"))
+        }   
+      } 
+      if (c == "WTP_bin"){
+        train<- make_bins(train)
+        test<- make_bins(test)
+        test_ends <- make_bins(test_ends)
+        test_notends <- make_bins(test_notends)
+      }
       
       #need to be standardizing test in the same way we standardize the train
       if (!c == "WTP_bin"){
-      # Calculate training means and standard deviations for columns starting with "X"
-      train_means <- train %>%
-        summarise(across(starts_with("X"), mean))
-      train_sds <- train %>%
-        summarise(across(starts_with("X"), sd))
-      
-      # Standardize training set
-      bprobit_train <- train %>%
-        mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
-      
-      # Standardize test sets using training means and standard deviations
-      bprobit_test <- test %>%
-        mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
-      
-      bprobit_test_ends <- test_ends %>%
-        mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
-      
-      bprobit_test_notends <- test_notends %>%
-        mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
-      
+        # Calculate training means and standard deviations for columns starting with "X"
+        train_means <- train %>%
+          summarise(across(starts_with("X"), mean))
+        train_sds <- train %>%
+          summarise(across(starts_with("X"), sd))
+        
+        # Standardize training set
+        bprobit_train <- train %>%
+          mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
+        
+        # Standardize test sets using training means and standard deviations
+        bprobit_test <- test %>%
+          mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
+        
+        bprobit_test_ends <- test_ends %>%
+          mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
+        
+        bprobit_test_notends <- test_notends %>%
+          mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
+        
       }else{
         bprobit_test <- test
         bprobit_train <- train
@@ -194,8 +200,8 @@ if (c == "WTP_bin"){
       #fill row by row
       for (i in 1:ndpost){
         print(i)
-      #3. Calibrate probabilities
-      b_probs_cali[i,] <- predict(calibration_model, data.frame(b_probs1=b$prob.test[i,]),type = "response")
+        #3. Calibrate probabilities
+        b_probs_cali[i,] <- predict(calibration_model, data.frame(b_probs1=b$prob.test[i,]),type = "response")
       }
       
       
@@ -233,21 +239,21 @@ if (c == "WTP_bin"){
       WTP_logit <- -coefs["(Intercept)"] / coefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-coefs[x_list] / coefs["A"])
       
       ################################################################  
-     #FIT BAYESIAN PROBIT 
+      #FIT BAYESIAN PROBIT 
       ################################################################ 
       bprobit <- stan_glm(f, 
-                             data = bprobit_train , 
-                             family = binomial(link = "probit"), 
-                             prior = normal(0, 1), 
-                             prior_intercept = normal(0, 1), 
-                             chains = 1, iter = 2000,
+                          data = bprobit_train , 
+                          family = binomial(link = "probit"), 
+                          prior = normal(0, 1), 
+                          prior_intercept = normal(0, 1), 
+                          chains = 1, iter = 2000,
                           init = "0")
       
       bcoefs <- as.data.frame(bprobit) %>% apply(2, mean)
       WTP_bprobit <- -bcoefs["(Intercept)"] / bcoefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-bcoefs[x_list] / bcoefs["A"]) 
       
-    ################################################################
-    #FIT NEURAL NETWORK
+      ################################################################
+      #FIT NEURAL NETWORK
       ################################################################ 
       # Define the tuning grid
       tune_grid <- expand.grid(size = c(2, 4, 6, 8),   # Number of hidden units
@@ -265,32 +271,32 @@ if (c == "WTP_bin"){
       tdatn2_long2 <- get_wtp_point(pred_vector = predict(nnet_model, n_test_notends, type = "prob")[,"1"], test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
       
       ################################################################
-
+      
       
       all[[j]] <- data.frame(data = c, 
                              sigma = sigma_1,
                              data = test.wtp[, c],
-                        data_name = gsub("WTP_", "", c),
-                        bart_q = tdat_long2$wtp_q,
-                        nn2_q = tdatn2_long2$wtp_q,
-                        rf = tdatrf_long2$wtp_q,
-                        probit = WTP_logit,
-                        bprobit = WTP_bprobit)
+                             data_name = gsub("WTP_", "", c),
+                             bart_q = tdat_long2$wtp_q,
+                             nn2_q = tdatn2_long2$wtp_q,
+                             rf = tdatrf_long2$wtp_q,
+                             probit = WTP_logit,
+                             bprobit = WTP_bprobit)
       
       results[[j]] <- data.frame(data = c,
                                  sigma = sigma_1,
                                  bart_q = mean((tdat_long2$wtp_q - test.wtp[, c])^2)^0.5,
-                            nn2_q = mean((tdatn2_long2$wtp_q - test.wtp[, c])^2)^0.5,
-                            rf_q = mean((tdatrf_long2$wtp_q - test.wtp[, c])^2)^0.5,
-                            probit = mean((WTP_logit - test.wtp[, c])^2)^0.5,
-                            bprobit = mean((WTP_bprobit - test.wtp[, c])^2)^0.5,
-                            data = gsub("WTP_", "", c),
-                            rep = r)
-    
-}
+                                 nn2_q = mean((tdatn2_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                                 rf_q = mean((tdatrf_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                                 probit = mean((WTP_logit - test.wtp[, c])^2)^0.5,
+                                 bprobit = mean((WTP_bprobit - test.wtp[, c])^2)^0.5,
+                                 data = gsub("WTP_", "", c),
+                                 rep = r)
+      
+    }
     all <- do.call(rbind, all)
     results <- do.call(rbind, results)
-
+    
     list(all = all, results = results)
   }
 

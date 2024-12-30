@@ -1,5 +1,4 @@
 
-library(Iso)
 
 get_wtp <- function(pred_matrix){
   
