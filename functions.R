@@ -52,7 +52,7 @@ return(list(wtp=tdat_long2, mean_wtp = mean_wtp))
 }
 
 
-get_wtp2 <- function(pred_matrix, test_ends,test_notends){
+get_wtp2 <- function(pred_matrix, test_ends,test_notends, ndpost){
   pts <- unique(test_ends$A)
   max_pts <- max(pts)
   print("first")

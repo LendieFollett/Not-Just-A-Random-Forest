@@ -11,6 +11,7 @@ library(randomForest)
 library(caret)
 library(BART)
 library(bartMachine)
+library(logistf)
 source("functions.R")
 
 numCores <- detectCores() - 1  # Use one less than the total number of cores
@@ -18,16 +19,16 @@ cl <- makeCluster(numCores)
 registerDoParallel(cl)
 
 sigma <- c(1,2,3,4) 
-n <- c(1500, 715)
+n <- c(1500, 500)
 
 comb <- expand.grid(sigma,n) %>% mutate(keep = paste0(Var1, Var2)) %>% pull(keep)
 
 registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 
 results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
-  foreach(reps = 1:5) %dopar% {
+  foreach(reps = 1:25) %dopar% {
     #introduce sparsity into prediction matrix?
-    sparsity = TRUE
+    sparsity = FALSE
     
     #error variance
     sigma <- as.numeric(substr(comb, 1, 1))
@@ -208,7 +209,8 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       #BART
       tdat_long2 <- get_wtp2(pred_matrix = b_probs_cali %>% t(),#,b$prob.test %>% t(),#dim = 1000 x 1800
                              test_ends = test_ends,
-                             test_notends=test_notends)
+                             test_notends=test_notends,
+                             ndpost = ndpost)
       #tdat_long2_uncali <- get_wtp2(pred_matrix = b$prob.test %>% t(),#dim = 1000 x 1800
       #                       test_ends = test_ends,
       #                       test_notends=test_notends)
@@ -273,7 +275,8 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       ################################################################
       
       
-      all[[j]] <- data.frame(data = c, 
+      all[[j]] <- data.frame(n = n, 
+                             data = c, 
                              sigma = sigma_1,
                              data = test.wtp[, c],
                              data_name = gsub("WTP_", "", c),
@@ -283,7 +286,8 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                              probit = WTP_logit,
                              bprobit = WTP_bprobit)
       
-      results[[j]] <- data.frame(data = c,
+      results[[j]] <- data.frame(n = n,
+                                 data = c,
                                  sigma = sigma_1,
                                  bart_q = mean((tdat_long2$wtp_q - test.wtp[, c])^2)^0.5,
                                  nn2_q = mean((tdatn2_long2$wtp_q - test.wtp[, c])^2)^0.5,
@@ -304,15 +308,17 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
 all_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$all))))
 results_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$results))))
 
-#sparsity = FALSE
-#saveRDS(all_combined, paste0("all_combined_",sparsity,".RDS"))
-#saveRDS(results_combined, paste0("results_combined_",sparsity,".RDS"))
 
-#results_combinedTRUE <- readRDS( paste0("results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
-#results_combinedFALSE <- readRDS( paste0("results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
+sparsity = FALSE
+saveRDS(all_combined, paste0("all_combined_",sparsity,".RDS"))
+saveRDS(results_combined, paste0("results_combined_",sparsity,".RDS"))
+
+results_combinedTRUE <- readRDS( paste0("results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
+results_combinedFALSE <- readRDS( paste0("results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
+
 # Calculate results with highlighting of the lowest point
 highlighted_points <- results_combined %>%
-  group_by(data, sigma) %>%
+  group_by(data, sigma, n) %>%
   summarise(
     bart_q = mean(bart_q) / mean(probit),
     nn2_q = mean(nn2_q) / mean(probit),
@@ -322,13 +328,13 @@ highlighted_points <- results_combined %>%
   mutate(data = factor(data, levels = c("WTP_normal", "WTP_friedman", "WTP_step", "WTP_bin"),
                        labels = c("Linear", "Friedman", "Step", "Binary"))) %>%
   pivot_longer(cols = c(bart_q, nn2_q, rf), names_to = "model", values_to = "value") %>%
-  group_by(data, sigma) %>%
+  group_by(data, sigma,n) %>%
   filter(value == min(value)) %>% # Filter for the minimum value for each sigma and data combination
   ungroup()
 
 # COMPARING RMSE - need to also look at bias
 results_combined %>%
-  group_by(data, sigma) %>%
+  group_by(data, sigma,n) %>%
   summarise(
     bart_q = mean(bart_q) / mean(probit),
     nn2_q = mean(nn2_q) / mean(probit),
@@ -349,7 +355,7 @@ results_combined %>%
   geom_point(data = highlighted_points, 
              aes(x = sigma, y = value, colour = model), 
              size = 4, shape = 1) + # Highlighted points
-  facet_wrap(~data, nrow = 3) +
+  facet_grid(n~data) +
   scale_color_manual(
     name = "Model", # Legend title
     values = c("BART" = "grey10", "NN" = "grey50", "RF" = "grey80", "Probit" = "grey"),
