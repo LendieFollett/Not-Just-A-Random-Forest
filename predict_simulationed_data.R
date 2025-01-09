@@ -19,16 +19,17 @@ cl <- makeCluster(numCores)
 registerDoParallel(cl)
 
 sigma <- c(1,2,3,4) 
-n <- c(1500, 500)
+n <- c(1000, 500) + 500
+#reserve 500 for the test set
 
 comb <- expand.grid(sigma,n) %>% mutate(keep = paste0(Var1, Var2)) %>% pull(keep)
 
 registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 
 results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
-  foreach(reps = 1:25) %dopar% {
+  foreach(reps = 25) %dopar% {
     #introduce sparsity into prediction matrix?
-    sparsity = FALSE
+    sparsity = TRUE
     
     #error variance
     sigma <- as.numeric(substr(comb, 1, 1))
@@ -87,7 +88,9 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                          A = A_samps,
                          apply(data, 2, function(x){ifelse(x > A_samps, 1, 0)}))
     
-    train.idx <- sample(1:nrow(survey), size = .7*nrow(survey), replace=FALSE)
+    train.idx <- sample(1:nrow(survey), 
+                        size = nrow(survey) - 500, #remaining 500 for the test set
+                        replace=FALSE)
     
     train <- survey[train.idx,]
     test <-survey[-train.idx,]
@@ -175,6 +178,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       n_test_notends <- bprobit_test_notends
       
       n_train$A <- (n_train$A - mean(A))/sd(A)
+      
       n_test$A <- (n_test$A - mean(A))/sd(A)
       n_test_ends$A <- (n_test_ends$A - mean(A))/sd(A)
       n_test_notends$A <- (n_test_notends$A - mean(A))/sd(A)
@@ -192,28 +196,29 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                  nskip = 2000)
       
       # 1. Fit logistic regression on the BART (uncalibrated) probabilities
-      b_probs1 <- b$prob.train.mean
-      calibration_model <- logistf(bprobit_train[,c] ~ b_probs1, family = binomial(link = "logit"),
-                                   plcontrol = logistpl.control(maxit=1000))
+     # b_probs1 <- b$prob.train.mean
+      #calibration_model <- logistf(bprobit_train[,c] ~ b_probs1, family = binomial(link = "logit"),
+          #                         plcontrol = logistpl.control(maxit=1000))
       
       #make empty matrix
-      b_probs_cali <- matrix(ncol = nrow(bprobit_test_notends), nrow = ndpost)
+      #b_probs_cali <- matrix(ncol = nrow(bprobit_test_notends), nrow = ndpost)
       #fill row by row
-      for (i in 1:ndpost){
-        print(i)
+      #for (i in 1:ndpost){
+       # print(i)
         #3. Calibrate probabilities
-        b_probs_cali[i,] <- predict(calibration_model, data.frame(b_probs1=b$prob.test[i,]),type = "response")
-      }
+      #  b_probs_cali[i,] <- predict(calibration_model, data.frame(b_probs1=b$prob.test[i,]),type = "response")
+      #}
       
       
       #BART
-      tdat_long2 <- get_wtp2(pred_matrix = b_probs_cali %>% t(),#,b$prob.test %>% t(),#dim = 1000 x 1800
+      #tdat_long2 <- get_wtp2(pred_matrix = b_probs_cali %>% t(),#,b$prob.test %>% t(),#dim = 1000 x 1800
+      #                       test_ends = test_ends,
+      #                       test_notends=test_notends,
+      #                       ndpost = ndpost)
+      tdat_long2_uncali <- get_wtp2(pred_matrix = b$prob.test %>% t(),#dim = 1000 x 1800
                              test_ends = test_ends,
                              test_notends=test_notends,
                              ndpost = ndpost)
-      #tdat_long2_uncali <- get_wtp2(pred_matrix = b$prob.test %>% t(),#dim = 1000 x 1800
-      #                       test_ends = test_ends,
-      #                       test_notends=test_notends)
       ################################################################
       #FIT RF
       ################################################################
@@ -221,6 +226,8 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                          data = bprobit_train,
                          ntree = 1000,
                          type = "class") 
+      
+      rf_probs_uncali <- predict(rf, bprobit_test_notends, type = "prob")[,"1"]
       # 1. Fit logistic regression on the random forest (uncalibrated) probabilities
       rf_probs1 <- predict(rf, bprobit_train, type = "prob")[,"1"]
       calibration_model <- logistf(bprobit_train[,c] ~ rf_probs1, family = binomial(link = "logit"),
@@ -232,6 +239,8 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       #3. Calibrate probabilities
       rf_probs_cali <- predict(calibration_model, data.frame(rf_probs1=rf_probs2),type = "response")
       tdatrf_long2 <- get_wtp_point(pred_vector = rf_probs_cali, test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      
+      tdatrf_uncali_long2 <- get_wtp_point(pred_vector = rf_probs_uncali, test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
       
       ################################################################ 
       #FIT TRADITIONAL PROBIT 
@@ -248,7 +257,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                           family = binomial(link = "probit"), 
                           prior = normal(0, 1), 
                           prior_intercept = normal(0, 1), 
-                          chains = 1, iter = 2000,
+                          chains = 1, iter = 1000,
                           init = "0")
       
       bcoefs <- as.data.frame(bprobit) %>% apply(2, mean)
@@ -274,38 +283,54 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       
       ################################################################
       
-      
-      all[[j]] <- data.frame(n = n, 
-                             data = c, 
-                             sigma = sigma_1,
-                             data = test.wtp[, c],
-                             data_name = gsub("WTP_", "", c),
-                             bart_q = tdat_long2$wtp_q,
-                             nn2_q = tdatn2_long2$wtp_q,
-                             rf = tdatrf_long2$wtp_q,
-                             probit = WTP_logit,
-                             bprobit = WTP_bprobit)
-      
-      results[[j]] <- data.frame(n = n,
-                                 data = c,
-                                 sigma = sigma_1,
-                                 bart_q = mean((tdat_long2$wtp_q - test.wtp[, c])^2)^0.5,
-                                 nn2_q = mean((tdatn2_long2$wtp_q - test.wtp[, c])^2)^0.5,
-                                 rf_q = mean((tdatrf_long2$wtp_q - test.wtp[, c])^2)^0.5,
-                                 probit = mean((WTP_logit - test.wtp[, c])^2)^0.5,
-                                 bprobit = mean((WTP_bprobit - test.wtp[, c])^2)^0.5,
+      if(r == 1){
+      all[[j]] <- data.frame(n = n*.7, 
+                              data = gsub("WTP_", "", c), 
+                              rep = r,
+                              sigma = sigma_1,
+                              true = test.wtp[, c],
+                              #bart_q = tdat_long2$wtp_q,
+                              bart_uncali_q = tdat_long2_uncali$wtp_q,
+                              nn2_q = tdatn2_long2$wtp_q,
+                              rf = tdatrf_long2$wtp_q,
+                              rf_uncali = tdatrf_uncali_long2$wtp_q,
+                              probit = WTP_logit,
+                              bprobit = WTP_bprobit)
+      }
+      #one row per rep
+      results[[j]] <- data.frame(n = n*.7,
                                  data = gsub("WTP_", "", c),
-                                 rep = r)
+                                 sigma = sigma_1,
+                                 rep = r,
+                                 
+                                 #average individual mse
+                                 #bart_mse = mean((tdat_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                                 bart_uncali_mse = mean((tdat_long2_uncali$wtp_q - test.wtp[, c])^2)^0.5,
+                                 nn2_mse = mean((tdatn2_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                                 rf_mse = mean((tdatrf_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                                 rf_uncali_mse = mean((tdatrf_uncali_long2$wtp_q - test.wtp[, c])^2)^0.5,
+                                 probit_mse = mean((WTP_logit - test.wtp[, c])^2)^0.5,
+                                 bprobit_mse = mean((WTP_bprobit - test.wtp[, c])^2)^0.5,
+                                 
+                                 #median of the test sample predicted WTP minus median true WTP
+                                 bart_bias = median(tdat_long2$wtp_q) - median(test.wtp[, c]),
+                                 bart_uncali_bias = median(tdat_long2_uncali$wtp_q) - median(test.wtp[, c]),
+                                 nn2_bias = median(tdatn2_long2$wtp_q) - median(test.wtp[, c]),
+                                 rf_bias = median(tdatrf_long2$wtp_q) - median(test.wtp[, c]),
+                                 rf_uncali_bias = median(tdatrf_uncali_long2$wtp_q) - median(test.wtp[, c]),
+                                 probit_bias = median(WTP_logit) - median(test.wtp[, c]),
+                                 bprobit_bias = median(WTP_bprobit) - median(test.wtp[, c]))
       
     }
     all <- do.call(rbind, all)
     results <- do.call(rbind, results)
     
-    list(all = all, results = results)
+    list( results = results)#all = all,
   }
 
 
-all_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$all))))
+
+#all_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$all))))
 results_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$results))))
 
 
@@ -316,18 +341,21 @@ saveRDS(results_combined, paste0("results_combined_",sparsity,".RDS"))
 results_combinedTRUE <- readRDS( paste0("results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
 results_combinedFALSE <- readRDS( paste0("results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
 
+results_combined <-results_combinedFALSE
 # Calculate results with highlighting of the lowest point
 highlighted_points <- results_combined %>%
   group_by(data, sigma, n) %>%
   summarise(
-    bart_q = mean(bart_q) / mean(probit),
-    nn2_q = mean(nn2_q) / mean(probit),
-    rf = mean(rf_q) / mean(probit),
-    bprobit = mean(bprobit) / mean(probit)
+   # bart_cali = mean(bart_mse) / mean(probit_mse),
+    bart_uncali = mean(bart_uncali_mse) / mean(probit_mse),
+    nn2_q = mean(nn2_mse) / mean(probit_mse),
+    rf_cali = mean(rf_mse) / mean(probit_mse),
+    rf_uncali = mean(rf_uncali_mse) / mean(probit_mse),
+    bprobit = mean(bprobit_mse) / mean(probit_mse)
   ) %>%
-  mutate(data = factor(data, levels = c("WTP_normal", "WTP_friedman", "WTP_step", "WTP_bin"),
+  mutate(data = factor(data, levels = c("normal", "friedman", "step", "bin"),
                        labels = c("Linear", "Friedman", "Step", "Binary"))) %>%
-  pivot_longer(cols = c(bart_q, nn2_q, rf), names_to = "model", values_to = "value") %>%
+  pivot_longer(cols = c(bart_uncali, nn2_q,rf_cali,rf_uncali, bprobit), names_to = "model", values_to = "value") %>%
   group_by(data, sigma,n) %>%
   filter(value == min(value)) %>% # Filter for the minimum value for each sigma and data combination
   ungroup()
@@ -336,35 +364,53 @@ highlighted_points <- results_combined %>%
 results_combined %>%
   group_by(data, sigma,n) %>%
   summarise(
-    bart_q = mean(bart_q) / mean(probit),
-    nn2_q = mean(nn2_q) / mean(probit),
-    rf = mean(rf_q) / mean(probit),
-    bprobit = mean(bprobit) / mean(probit)
-  ) %>%
+    #bart_cali = mean(bart_mse) / mean(probit_mse),
+    bart_uncali = mean(bart_uncali_mse) / mean(probit_mse),
+    nn2_q = mean(nn2_mse) / mean(probit_mse),
+    rf_cali = mean(rf_mse) / mean(probit_mse),
+    rf_uncali = mean(rf_uncali_mse) / mean(probit_mse),
+    bprobit = mean(bprobit_mse) / mean(probit_mse)
+  ) %>% 
   ungroup() %>%
-  mutate(data = factor(data, levels = c("WTP_normal", "WTP_friedman", "WTP_step", "WTP_bin"),
+  mutate(data = factor(data, levels = c("normal", "friedman", "step", "bin"),
                        labels = c("Linear", "Friedman", "Step", "Binary"))) %>%
   ggplot() +
-  geom_line(aes(x = sigma, y = bart_q, colour = "BART")) +
+  #geom_line(aes(x = sigma, y = bart_cali, colour = "BART Cali")) +
+  #geom_point(aes(x = sigma, y = bart_cali, colour = "BART Cali")) +
+  
   geom_line(aes(x = sigma, y = nn2_q, colour = "NN")) +
-  geom_line(aes(x = sigma, y = rf, colour = "RF")) +
-  geom_point(aes(x = sigma, y = bart_q, colour = "BART")) +
   geom_point(aes(x = sigma, y = nn2_q, colour = "NN")) +
-  geom_point(aes(x = sigma, y = rf, colour = "RF")) +
+  
+  geom_line(aes(x = sigma, y = bprobit, colour = "bprobit")) +
+  geom_point(aes(x = sigma, y = bprobit, colour = "bprobit")) +
+  
+  geom_line(aes(x = sigma, y = rf_cali, colour = "RF Cali")) +
+  geom_point(aes(x = sigma, y = rf_cali, colour = "RF Cali")) +
+  
+  geom_line(aes(x = sigma, y = rf_uncali, colour = "RF Uncali")) +
+  geom_point(aes(x = sigma, y = rf_uncali, colour = "RF Uncali")) +
+  
+  geom_line(aes(x = sigma, y = bart_uncali, colour = "BART Uncali")) +  
+  geom_point(aes(x = sigma, y = bart_uncali, colour = "BART Uncali")) +
+
   geom_hline(aes(yintercept = 1, colour = "Probit"), linetype = 2) +
+  
   geom_point(data = highlighted_points, 
              aes(x = sigma, y = value, colour = model), 
              size = 4, shape = 1) + # Highlighted points
   facet_grid(n~data) +
   scale_color_manual(
     name = "Model", # Legend title
-    values = c("BART" = "grey10", "NN" = "grey50", "RF" = "grey80", "Probit" = "grey"),
-    breaks = c("BART", "NN", "RF", "Probit")
+    #values = c("BART" = "grey10", "NN" = "grey50", "RF" = "grey80", "Probit" = "grey"),
+    #breaks = c("BART", "NN", "RF", "Probit")
+    values = c("BART Cali" = "blue", "BART Uncali" = "lightblue","RF Cali" = "darkgreen", "RF Uncali" = "lightgreen",
+               "NN" = "purple",bprobit = "pink",Probit = "grey")
   ) +
   theme_bw() +
-  labs(x = expression(sigma[epsilon]), y = "RMSE Ratio\n(relative to Probit)")
+  labs(x = expression(sigma[epsilon]), y = "RMSE Ratio\n(relative to Probit)") +
+  theme(text=element_text(size = 20))
 
-ggsave("RMSE_ratios_sparse.pdf")
+ggsave("RMSE_ratios_notsparse.pdf", width = 20, height = 15)
 
 
 
@@ -402,52 +448,80 @@ ggplot() +
 
 
 ##########
-# in terms of WTP Dollars - differences
 
-all_summarised <- all_combined %>% 
-  arrange(data, sigma) %>% 
-  group_by(data, sigma) %>% 
-  mutate(rep = rep(1:5, each = 300)) %>% 
-  group_by(data, sigma, rep) %>% 
-  summarise(bart_q = median(bart_q),
-            nn2_q = median(nn2_q),
-            rf = median(rf),
-            probit = median(probit),
-            true = median(data.1)) %>% 
-  ungroup() %>% 
-  melt(id.vars = c("data", "sigma", "rep", "true")) 
+all_combinedTRUE <- readRDS( paste0("all_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
+all_combinedFALSE <- readRDS( paste0("all_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
 
+all_combined <- all_combinedTRUE
 
+#in terms of median predicted WTP
 q <- .5
 all_summarised <- all_combined %>% 
-  arrange(data, sigma) %>% 
-  group_by(data, sigma) %>% 
-  mutate(rep = rep(1:5, each = 300)) %>% 
-  group_by(data, sigma, rep) %>% 
+  arrange(data, sigma,n) %>% 
+  group_by(data, sigma,n) %>% 
+  mutate(rep = rep(1:25, each = first(n)*.3)) %>% 
+  group_by(data, sigma, rep,n) %>% 
+  #median modeled and true WTP for test sets, for each rep
   summarise(bart_q = quantile(bart_q,q) %>% as.numeric(),
             nn2_q = quantile(nn2_q,q)%>% as.numeric(),
             rf = quantile(rf,q)%>% as.numeric(),
             probit = quantile(probit,q)%>% as.numeric(),
             true = quantile(data.1,q)%>% as.numeric()) %>% 
-  ungroup() %>% 
-  melt(id.vars = c("data", "sigma", "rep", "true")) 
+  ungroup() 
 
 
 all_summarised%>% 
-  filter(data == "WTP_step") %>% 
+  melt(id.vars = c("data", "sigma", "rep", "true", 'n')) %>% 
+  filter(data == "WTP_normal") %>% 
   ggplot() +
-  geom_point(aes(x = true, y = value, colour = sigma)) +
-  facet_wrap(variable~.) +
+  geom_point(aes(x = true, y = value, colour = factor(sigma))) +
+  geom_smooth(aes(x = true, y = value, colour = factor(sigma)), method = "lm", se = FALSE) +
+  facet_grid(n~variable) +
   geom_abline(aes(slope = 1, intercept = 0)) +
   coord_equal()+
-  labs(x = "True Median WTP", y = "Predicted Median WTP")
+  scale_colour_brewer(palette = "Blues")+
+  labs(x = "True Median WTP", y = "Predicted Median WTP") +
+  theme_dark()
   
+#Mean absolute deviation in terms of test median
+all_summarised %>% 
+  group_by(data, sigma, n) %>% 
+  summarise(
+    bart_q = mean(abs(bart_q - true)) / mean(abs(probit - true)),
+    nn2_q = mean(abs(nn2_q - true)) / mean(abs(probit - true))#,
+   # rf = mean(abs(rf - true)) / mean(abs(probit - true))
+  ) %>% 
+  melt(id.vars = c("data", "sigma", 'n'))%>% 
+  ggplot()+
+  geom_point(aes(x = sigma, y = value, colour =variable )) + 
+  geom_line(aes(x = sigma, y = value, colour =variable )) + 
+  geom_hline(aes(yintercept = 1))+
+  facet_grid(n~data) 
 
 all_summarised %>% 
-  group_by(data, sigma, variable) %>% 
-  summarise(mad = mean(abs(true - value))) %>% 
-  ggplot()+
-  geom_col(aes(x = data, y = mad, fill =variable ), position = "dodge") + 
-  facet_wrap(~sigma, ncol = 1)
 
+
+#### ASSESSING BIAS
+
+bias_summarised <- all_combined %>% 
+  arrange(data, sigma,n) %>% 
+  group_by(data, sigma,n) %>% 
+  mutate(rep = rep(1:25, each = first(n)*.3)) %>% 
+  group_by(data, sigma,n, rep) %>% 
+  summarise(bart_q = mean(bart_q - data.1),
+            nn2_q = mean(nn2_q - data.1),
+            rf = mean(rf - data.1),
+            probit = mean(probit - data.1)
+) %>% 
+  ungroup()%>% 
+  melt(id.vars = c("data", "sigma", "rep", 'n'))
+
+bias_summarised %>% 
+  filter(n == 500) %>% 
+  ggplot() + 
+  geom_violin(aes(y = value, x = variable, colour = variable), alpha = I(.5)) + 
+  geom_hline(aes(yintercept = 0), linetype = 2, colour = "grey50") +
+  facet_grid(data~sigma) +
+  theme_bw() + 
+  scale_fill_brewer(palette = "Spectral")
 
