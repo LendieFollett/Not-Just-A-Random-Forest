@@ -4,7 +4,7 @@ library(BART)
 library(reshape2)
 library(rstanarm)
 library(tidyr)
-
+library(Iso)
 source("src/functions.R")
 #introduce sparsity into prediction matrix?
 sparsity = TRUE
@@ -185,76 +185,46 @@ c = "WTP_friedman"
   ################################################################ 
   probit <- glm(f, data = bprobit_train, family = binomial(link = "probit"))
   coefs <- coef(probit)
-  WTP_logit <- -coefs["(Intercept)"] / coefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-coefs[x_list] / coefs["A"])
+  WTP_probit <- -coefs["(Intercept)"] / coefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-coefs[x_list] / coefs["A"])
   
   
 
-
-
-
-library(rstanarm)
-samps <- as.data.frame(bprobit)
-
-bresults <- get_wtp(pred_matrix = (mb$prob.test) %>%  t())
-
-bcoefs <- as.data.frame(bprobit) %>% apply(2, mean)
-first <- as.vector(-samps["(Intercept)"] / samps["CV_donate_bid"])[[1]]
-second <-  -as.matrix(test[, x_list])%*%t(apply(data.frame(samps[,x_list]),2, function(x){x/samps[,"CV_donate_bid"]})) 
-WTP_bprobit <- apply(second, 1, function(x){x + first})
-
-lrresults <- list(wtp = WTP_bprobit%>% as.data.frame() %>% 
-                    mutate(variable = paste0("Rep", c(1:1000)))  %>% 
-                    melt, 
-                  mean_wtp = data.frame(wtp_q = apply(WTP_bprobit, 2, mean)))
-colnames(lrresults$wtp) <- c("variable", "ID", "wtp_q")
-
-ggplot() + geom_point(aes(test.wtp[,c], bresults$mean_wtp$wtp_q)) + geom_abline(slope = 1, intercept = 0)
-ggplot() + geom_point(aes(test.wtp[,c], lrresults$mean_wtp$wtp_q)) + geom_abline(slope = 1, intercept = 0)
-ggplot() + geom_point(aes(bresults$mean_wtp$wtp_q, lrresults$mean_wtp$wtp_q)) + geom_abline(slope = 1, intercept = 0)
-
-mean((test.wtp[,c]- bresults$mean_wtp$wtp_q)^2)/mean((test.wtp[,c]- lrresults$mean_wtp$wtp_q)^2)
-
-
-tdat_long2 <- bresults$wtp
-tdatlr_long2 <- lrresults$wtp
+results <- data.frame(
+  true = test.wtp[,c],
+  bart = tdat_long2_uncali$wtp_q,
+  probit = WTP_probit
+)
+ggplot() + geom_point(aes(true, bart), data = results) + geom_abline(slope = 1, intercept = 0)
+ggplot() + geom_point(aes(true, probit), data = results) + geom_abline(slope = 1, intercept = 0)
 
 
 
 #make demand curve
 
-dcurves <- bresults$wtp %>% 
-  group_by( variable) %>%
-  mutate_at("wtp_q", list(quant = ~ 1-ecdf(.)(.))) %>%
-  ungroup() 
-
-dcurveslr <- lrresults$wtp %>% 
-  group_by( variable) %>%
-  mutate_at("wtp_q", list(quant = ~ 1-ecdf(.)(.))) %>%
-  ungroup() 
-
-dcurves_true <- test.wtp %>% 
-  mutate_at(c, list(quant = ~ 1-ecdf(.)(.))) %>%
+results <- results %>% 
+  #group_by( variable) %>%
+  mutate_at(c("bart", "probit", "true"), list(quant = ~ 1-ecdf(.)(.))) %>%
   ungroup() 
 
 round_to_nearest_0.05 <- function(x) {
   round(x / 0.05) * 0.05
 }
 
-dcurves2 <- dcurves%>% 
-  group_by(quant = round_to_nearest_0.05(quant)) %>% 
-  summarise(
-    mean = median(wtp_q),
-    quant05 = quantile(wtp_q, .05),
-    quant95 = quantile(wtp_q, .95)) 
+#dcurves2 <- dcurves%>% 
+#  group_by(quant = round_to_nearest_0.05(quant)) %>% 
+#  summarise(
+##    mean = median(wtp_q),
+#    quant05 = quantile(wtp_q, .05),
+#    quant95 = quantile(wtp_q, .95)) 
 
-dcurvestrue2 <- dcurves_true%>% 
-  select(all_of(c("quant", c))) %>% 
-  rename("WTP" = c) %>% 
-  group_by(quant = round_to_nearest_0.05(quant)) %>% 
-  summarise(
-    mean = median(WTP),
-    quant05 = quantile(WTP, .05),
-    quant95 = quantile(WTP, .95)) 
+#dcurvestrue2 <- dcurves_true%>% 
+#  select(all_of(c("quant", c))) %>% 
+##  rename("WTP" = c) %>% 
+#  group_by(quant = round_to_nearest_0.05(quant)) %>% 
+#  summarise(
+#    mean = median(WTP),
+#    quant05 = quantile(WTP, .05),
+#    quant95 = quantile(WTP, .95)) 
 
 
 

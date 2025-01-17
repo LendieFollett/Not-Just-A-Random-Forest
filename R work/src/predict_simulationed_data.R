@@ -19,8 +19,8 @@ numCores <- detectCores() - 1  # Use one less than the total number of cores
 cl <- makeCluster(numCores)
 registerDoParallel(cl)
 
-sigma <- c(1,2,3,4) 
-n <- c(1000, 500) + 500
+sigma <- c(1,2) 
+n <- c(1500,1000, 500, 250) + 500
 #reserve 500 for the test set
 
 comb <- expand.grid(sigma,n) %>% mutate(keep = paste0(Var1, Var2)) %>% pull(keep)
@@ -28,14 +28,15 @@ comb <- expand.grid(sigma,n) %>% mutate(keep = paste0(Var1, Var2)) %>% pull(keep
 registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 
 results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
-  foreach(reps = 1:25) %dopar% {
+  foreach(reps = 1:10) %dopar% {
     #introduce sparsity into prediction matrix?
     sparsity = TRUE
-    
+    #covariates distribution
+    a = 3; b = 1
     #error variance
     sigma <- as.numeric(substr(comb, 1, 1))
-    sigma_1 <- c(5,7,10,15)[sigma]#c(5,10,15)[sigma] #small, medium, large
-    sigma_2 <- c(5,7,10,15)[sigma]
+    sigma_1 <- c(7,15)[sigma]#c(5,10,15)[sigma] #small, medium, large
+    sigma_2 <- c(7,15)[sigma]
     
     # Number of observations (sample size)
     n <- as.numeric(substr(comb, 2, 6))
@@ -53,7 +54,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
     beta_linear <- 30
     
     # X_i drawn from U[-1, 1]
-    X <- runif(n*nP, 0, 1) %>% matrix(ncol = nP)
+    X <- rbeta(n*nP, a, b) %>% matrix(ncol = nP)#runif(n*nP, 0, 1) %>% matrix(ncol = nP)
     
     # Normal WTP_i = beta_N0 + beta_linear * X_i + error term (normally distributed)
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
@@ -449,7 +450,7 @@ dcurves %>%
   mutate(data = factor(data, levels = c("normal", "friedman", "step", "bin"),
                        labels = c("Linear", "Friedman", "Step", "Binary"))
   ) %>% 
-  filter(n == 1000 & sigma %in% c(5,10) ) %>% 
+  filter(n == 1000  ) %>% 
   ggplot() + 
   geom_line(aes(x = bart_uncali_q,y = bart_uncali_q_quant, colour = "BART" )) +
   geom_line(aes(x = probit,y = probit_quant, colour = "Probit" )) +
