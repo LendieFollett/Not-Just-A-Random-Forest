@@ -188,3 +188,86 @@ make_bins <- function(df){
   return(df)
 }
 
+
+
+rmse_ratio_plot <- function(results_combined, a){
+results_combined %>%
+    filter(a == a) %>% 
+  group_by(data, sigma,n) %>%
+  summarise(
+    #bart_cali = mean(bart_mse) / mean(probit_mse),
+    bart_uncali = mean(bart_uncali_mse) / mean(probit_mse),
+    nn2_q = mean(nn2_mse) / mean(probit_mse),
+    #rf_cali = mean(rf_mse) / mean(probit_mse),
+    rf_uncali = mean(rf_uncali_mse) / mean(probit_mse),
+    bprobit = mean(bprobit_mse) / mean(probit_mse)
+  ) %>% 
+  ungroup() %>%
+  ggplot() +
+  geom_line(aes(x = n, y = nn2_q, colour = "NN")) +
+  geom_point(aes(x = n, y = nn2_q, colour = "NN")) +
+  
+  #geom_line(aes(x = sigma, y = bprobit, colour = "B. Probit")) +
+  #geom_point(aes(x = sigma, y = bprobit, colour = "B. Probit")) +
+  
+  geom_line(aes(x = n, y = rf_uncali, colour = "RF")) +
+  geom_point(aes(x = n, y = rf_uncali, colour = "RF")) +
+  
+  geom_line(aes(x = n, y = bart_uncali, colour = "BART")) +  
+  geom_point(aes(x = n, y = bart_uncali, colour = "BART")) +
+  
+  geom_hline(aes(yintercept = 1, colour = "Probit"), linetype = 2) +
+  
+  facet_grid(sigma~data) +
+  scale_color_manual(
+    name = "Model", # Legend title
+    #values = c("BART" = "grey10", "NN" = "grey50", "RF" = "grey80", "Probit" = "grey"),
+    breaks = c("BART", "NN", "RF", "Probit"),
+    values = c("BART" = "black",
+               "NN" = "grey40",
+               "RF" = "grey60",
+               "Probit" = "grey85")
+  ) +
+  theme_bw() +
+  labs(x = expression(sigma[epsilon]), y = "RMSE Ratio\n(relative to Probit)") +
+  theme(text=element_text(size = 20))
+}
+
+bias_plot <- function(results_combined, a){
+  results_combined %>%
+    filter(a == a) %>% 
+    melt(id.vars = c("data", "rep", "sigma", "n")) %>% 
+    filter(grepl("bias", variable) & !grepl("bprobit", variable)) %>% 
+    mutate(variable = factor(variable, 
+                             levels = c("bart_uncali_bias", "nn2_bias", "rf_uncali_bias", "probit_bias"),
+                             labels = c("BART", "NN", "RF", "Probit"))) %>% 
+    group_by(data, sigma, n, variable) %>% 
+    summarise(value = mean(value)) %>% 
+    ggplot() +
+    geom_line(aes(x = n, y = value, colour = factor(variable), linetype = factor(variable), group = factor(variable))) +
+    geom_point(aes(x = n, y = value, colour = factor(variable))) +
+    geom_hline(aes(yintercept = 0)) +
+    facet_grid(sigma~data, scales = "free_y") +
+    labs(x = "Sigma", y = "Bias (median)", colour = "Model", linetype = "Model") +
+    scale_colour_grey("Model", start = 0, end = .8) +
+    scale_linetype_manual("Model", values = c("solid", "solid", "solid", "dashed")) +
+    theme_bw()
+}
+
+rmse_plot <- function(results_combined,a){
+results_combined %>%
+  melt(id.vars = c("data", "rep", "sigma", "n")) %>% 
+  filter(grepl("mse", variable) & ! grepl("bprobit", variable)) %>% 
+  mutate(variable = factor(variable, 
+                           levels = c("bart_uncali_mse", "nn2_mse", "rf_uncali_mse", "probit_mse"),
+                           labels = c("BART", "NN", "RF", "PROBIT"))) %>% 
+  group_by(data, sigma, n, variable) %>% 
+  summarise(value = mean(value)) %>% 
+  ggplot() +
+  geom_line(aes(x = n, y = value, colour = factor(variable), group = factor(variable))) +
+  geom_point(aes(x = n, y = value, colour = factor(variable))) +
+  facet_grid(sigma~data, scales = "free_y") +
+  labs(x = "Sigma", y = "RMSE") +
+  scale_colour_grey("Model",start = 0, end = .8) +
+  theme_bw()
+}

@@ -19,27 +19,28 @@ numCores <- detectCores() - 1  # Use one less than the total number of cores
 cl <- makeCluster(numCores)
 registerDoParallel(cl)
 
-sigma <- c(1,2) 
+a <- c(1,3) #1 = uniform, 3 = beta(3,1) (asymmetric)
+sigma <- c(1,2)  # low high
 n <- c(1500,1000, 500, 250) + 500
 #reserve 500 for the test set
 
-comb <- expand.grid(sigma,n) %>% mutate(keep = paste0(Var1, Var2)) %>% pull(keep)
+comb <- expand.grid(a,sigma,n) %>% mutate(keep = paste0(Var1, Var2, Var3)) %>% pull(keep)
 
 registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 
 results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
-  foreach(reps = 1:10) %dopar% {
+  foreach(reps = 1:25) %dopar% {
     #introduce sparsity into prediction matrix?
     sparsity = TRUE
     #covariates distribution
-    a = 3; b = 1
+    a <- as.numeric(substr(comb, 1,1)); b = 1
     #error variance
-    sigma <- as.numeric(substr(comb, 1, 1))
+    sigma <- as.numeric(substr(comb, 2,2))
     sigma_1 <- c(7,15)[sigma]#c(5,10,15)[sigma] #small, medium, large
     sigma_2 <- c(7,15)[sigma]
     
     # Number of observations (sample size)
-    n <- as.numeric(substr(comb, 2, 6))
+    n <- as.numeric(substr(comb, 3, 7))
     
     r <- reps
     # Load necessary data and scripts
@@ -289,6 +290,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       all[[j]] <- data.frame(n = n - 500,
                               data = gsub("WTP_", "", c), 
                               rep = r,
+                             a = ifelse(a == 1, "symmetric", "asymmetric"),
                               sigma = sigma_1,
                               true = test.wtp[, c],
                               #bart_q = tdat_long2$wtp_q,
@@ -304,7 +306,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                                  data = gsub("WTP_", "", c),
                                  sigma = sigma_1,
                                  rep = r,
-                                 
+                                 a = ifelse(a == 1, "symmetric", "asymmetric"),
                                  #average individual mse
                                  #bart_mse = mean((tdat_long2$wtp_q - test.wtp[, c])^2)^0.5,
                                  bart_uncali_mse = mean((tdat_long2_uncali$wtp_q - test.wtp[, c])^2)^0.5,
@@ -337,105 +339,42 @@ results_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, la
 
 
 sparsity = TRUE
+
 saveRDS(all_combined, paste0("all_combined_",sparsity,".RDS"))
 saveRDS(results_combined, paste0("results_combined_",sparsity,".RDS"))
 
 #results_combinedTRUE <- readRDS( paste0("results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
 #results_combinedFALSE <- readRDS( paste0("results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
 
-#results_combined <-results_combinedFALSE
-# Calculate results with highlighting of the lowest point
-
 
 results_combined <- results_combined %>% 
-  select(n, data, sigma, rep, bart_uncali_mse, nn2_mse, rf_uncali_mse, probit_mse, bprobit_mse,
+  select(n, data, sigma,a, rep, bart_uncali_mse, nn2_mse, rf_uncali_mse, probit_mse, bprobit_mse,
          bart_uncali_bias, nn2_bias, rf_uncali_bias, probit_bias, bprobit_bias) %>% 
   mutate(data = factor(data, levels = c("normal", "friedman", "step", "bin"),
                        labels = c("Linear", "Friedman", "Step", "Binary"))
          ) 
 
+
 # COMPARING RMSE - need to also look at bias
-results_combined %>%
-  group_by(data, sigma,n) %>%
-  summarise(
-    #bart_cali = mean(bart_mse) / mean(probit_mse),
-    bart_uncali = mean(bart_uncali_mse) / mean(probit_mse),
-    nn2_q = mean(nn2_mse) / mean(probit_mse),
-    #rf_cali = mean(rf_mse) / mean(probit_mse),
-    rf_uncali = mean(rf_uncali_mse) / mean(probit_mse),
-    bprobit = mean(bprobit_mse) / mean(probit_mse)
-  ) %>% 
-  ungroup() %>%
-  ggplot() +
-  geom_line(aes(x = sigma, y = nn2_q, colour = "NN")) +
-  geom_point(aes(x = sigma, y = nn2_q, colour = "NN")) +
-  
-  #geom_line(aes(x = sigma, y = bprobit, colour = "B. Probit")) +
-  #geom_point(aes(x = sigma, y = bprobit, colour = "B. Probit")) +
-  
-  geom_line(aes(x = sigma, y = rf_uncali, colour = "RF")) +
-  geom_point(aes(x = sigma, y = rf_uncali, colour = "RF")) +
-  
-  geom_line(aes(x = sigma, y = bart_uncali, colour = "BART")) +  
-  geom_point(aes(x = sigma, y = bart_uncali, colour = "BART")) +
-
-  geom_hline(aes(yintercept = 1, colour = "Probit"), linetype = 2) +
-  
-  facet_grid(n~data) +
-  scale_color_manual(
-    name = "Model", # Legend title
-    #values = c("BART" = "grey10", "NN" = "grey50", "RF" = "grey80", "Probit" = "grey"),
-    breaks = c("BART", "NN", "RF", "Probit"),
-    values = c("BART" = "black",
-               "NN" = "grey40",
-               "RF" = "grey60",
-               "Probit" = "grey85")
-  ) +
-  theme_bw() +
-  labs(x = expression(sigma[epsilon]), y = "RMSE Ratio\n(relative to Probit)") +
-  theme(text=element_text(size = 20))
-
-ggsave("RMSE_ratios_sparse.pdf", width = 20, height = 15)
+p <- rmse_ratio_plot(results_combined, a = 3);p
+ggsave("RMSE_ratios_sparse_asym.pdf",plot = p, width = 20, height = 15)
+p <- rmse_ratio_plot(results_combined, a = 1);p
+ggsave("RMSE_ratios_sparse_sym.pdf",plot = p, width = 20, height = 15)
 
 
 
-results_combined %>%
-  melt(id.vars = c("data", "rep", "sigma", "n")) %>% 
-  filter(grepl("bias", variable) & !grepl("bprobit", variable)) %>% 
-  mutate(variable = factor(variable, 
-                           levels = c("bart_uncali_bias", "nn2_bias", "rf_uncali_bias", "probit_bias"),
-                           labels = c("BART", "NN", "RF", "Probit"))) %>% 
-  group_by(data, sigma, n, variable) %>% 
-  summarise(value = mean(value)) %>% 
-  ggplot() +
-  geom_line(aes(x = sigma, y = value, colour = factor(variable), linetype = factor(variable), group = factor(variable))) +
-  geom_point(aes(x = sigma, y = value, colour = factor(variable))) +
-  geom_hline(aes(yintercept = 0)) +
-  facet_grid(n~data, scales = "free_y") +
-  labs(x = "Sigma", y = "Bias (median)", colour = "Model", linetype = "Model") +
-  scale_colour_grey("Model", start = 0, end = .8) +
-  scale_linetype_manual("Model", values = c("solid", "solid", "solid", "dashed")) +
-  theme_bw()
-ggsave("bias_median_sparse.pdf", width = 20, height = 15)
+p <- bias_plot(results_combined, a = 3);p
+ggsave("bias_median_sparse_asym.pdf", width = 20, height = 15)
+p <- bias_plot(results_combined, a = 1);p
+ggsave("bias_median_sparse_sym.pdf", width = 20, height = 15)
+
 
 
 #is this one necessary? it's just the first plot, but not relative to probit
-results_combined %>%
-  melt(id.vars = c("data", "rep", "sigma", "n")) %>% 
-  filter(grepl("mse", variable) & ! grepl("bprobit", variable)) %>% 
-  mutate(variable = factor(variable, 
-                           levels = c("bart_uncali_mse", "nn2_mse", "rf_uncali_mse", "probit_mse"),
-                           labels = c("BART", "NN", "RF", "PROBIT"))) %>% 
-  group_by(data, sigma, n, variable) %>% 
-  summarise(value = mean(value)) %>% 
-  ggplot() +
-  geom_line(aes(x = sigma, y = value, colour = factor(variable), group = factor(variable))) +
-  geom_point(aes(x = sigma, y = value, colour = factor(variable))) +
-  facet_grid(n~data, scales = "free_y") +
-  labs(x = "Sigma", y = "RMSE") +
-  scale_colour_grey("Model",start = 0, end = .8) +
-  theme_bw()
-ggsave("RMSE_sparse.pdf", width = 20, height = 15)
+p <- rmse_plot(results_combined,a=3);p
+ggsave("RMSE_sparse_asym.pdf", width = 20, height = 15)
+p <- rmse_plot(results_combined,a=1);p
+ggsave("RMSE_sparse_sym.pdf", width = 20, height = 15)
 
 
 
