@@ -31,7 +31,7 @@ registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
   foreach(reps = 1:25) %dopar% {
     #introduce sparsity into prediction matrix?
-    sparsity = TRUE
+    sparsity = FALSE
     #covariates distribution
     a <- as.numeric(substr(comb, 1,1)); b = 1
     #error variance
@@ -69,7 +69,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
     WTP_step <- beta_N0 + beta_linear * (X[,1] < 0.5) + epsilon_Ni
     
     # Binary x's only, normal error
-    bin_beta <- c(5,10,-15,-25,10,25, 15) %>% as.matrix()
+    bin_beta <- c(5,10,-15,-25,10, -25, 25) %>% as.matrix()#c(5,10,-15,-25,10,25, 15) %>% as.matrix()#
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
     X2 <- apply(X[,1:5], 2, function(x){ifelse(x > 0.5, 1, 0)})
     WTP_bin<- beta_N0 + as.matrix(data.frame(X2, X2[,1]*X2[,2], X2[,1]*X2[,3]))%*%(bin_beta) + epsilon_Ni    
@@ -338,78 +338,11 @@ all_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply
 results_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$results))))
 
 
-sparsity = TRUE
+sparsity = FALSE
 
 saveRDS(all_combined, paste0("all_combined_",sparsity,".RDS"))
 saveRDS(results_combined, paste0("results_combined_",sparsity,".RDS"))
 
 #results_combinedTRUE <- readRDS( paste0("results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
 #results_combinedFALSE <- readRDS( paste0("results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
-
-
-results_combined <- results_combined %>% 
-  select(n, data, sigma,a, rep, bart_uncali_mse, nn2_mse, rf_uncali_mse, probit_mse, bprobit_mse,
-         bart_uncali_bias, nn2_bias, rf_uncali_bias, probit_bias, bprobit_bias) %>% 
-  mutate(data = factor(data, levels = c("normal", "friedman", "step", "bin"),
-                       labels = c("Linear", "Friedman", "Step", "Binary"))
-         ) 
-
-
-# COMPARING RMSE - need to also look at bias
-p <- rmse_ratio_plot(results_combined, a = 3);p
-ggsave("RMSE_ratios_sparse_asym.pdf",plot = p, width = 20, height = 15)
-p <- rmse_ratio_plot(results_combined, a = 1);p
-ggsave("RMSE_ratios_sparse_sym.pdf",plot = p, width = 20, height = 15)
-
-
-
-p <- bias_plot(results_combined, a = 3);p
-ggsave("bias_median_sparse_asym.pdf", width = 20, height = 15)
-p <- bias_plot(results_combined, a = 1);p
-ggsave("bias_median_sparse_sym.pdf", width = 20, height = 15)
-
-
-
-#is this one necessary? it's just the first plot, but not relative to probit
-p <- rmse_plot(results_combined,a=3);p
-ggsave("RMSE_sparse_asym.pdf", width = 20, height = 15)
-p <- rmse_plot(results_combined,a=1);p
-ggsave("RMSE_sparse_sym.pdf", width = 20, height = 15)
-
-
-
-dcurves <- all_combined%>% 
-  select(n, data, sigma, true, bart_uncali_q, nn2_q, rf_uncali, probit, bprobit) %>% 
-  group_by( n, data, sigma) %>%
-  mutate_at(c("true","bart_uncali_q", "nn2_q", "rf_uncali", "probit", "bprobit"), list(quant = ~ 1-ecdf(.)(.))) %>%
-  ungroup() 
-
-
-dcurves %>% 
-  mutate(data = factor(data, levels = c("normal", "friedman", "step", "bin"),
-                       labels = c("Linear", "Friedman", "Step", "Binary"))
-  ) %>% 
-  filter(n == 1000  ) %>% 
-  ggplot() + 
-  geom_line(aes(x = bart_uncali_q,y = bart_uncali_q_quant, colour = "BART" )) +
-  geom_line(aes(x = probit,y = probit_quant, colour = "Probit" )) +
-  geom_line(aes(x = nn2_q,y = nn2_q_quant, colour = "NN" )) +
-  geom_line(aes(x = true,y = true_quant, colour = "True"),linewidth = 1) +
-  facet_grid(sigma~data, scales = "free") +
-  scale_color_manual(
-    name = "Model", 
-    breaks = c("True","BART", "NN", "RF", "Probit"),
-    values = c("True" = "black",
-               "BART" = "black",
-               "NN" = "grey40",
-               "RF" = "grey60",
-               "Probit" = "grey85")
-  ) +
-  scale_linewidth_manual("Model", values = c(1, rep(.5, 4)))+ 
-  theme_bw() +
-  labs(x = "WTP", y = "Quantile")
-
-ggsave("curves_sparse.pdf", width = 20, height = 20)
-
-
 
