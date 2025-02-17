@@ -192,8 +192,8 @@ make_bins <- function(df){
 
 rmse_ratio_plot <- function(results_combined, k){
 results_combined %>%
-    filter(sigma == 7 & kind == k) %>% 
-  group_by(data,n, kind) %>%
+    filter(sigma == 7 & sparsity == k) %>% 
+  group_by(data,n,a) %>%
   summarise(
     #bart_cali = mean(bart_mse) / mean(probit_mse),
     bart_uncali = mean(bart_uncali_mse) / mean(probit_mse),
@@ -230,45 +230,74 @@ results_combined %>%
   ) +
   theme_bw() +
   labs(x = expression(n), y = "RMSE Ratio\n(relative to Probit)") +
-  theme(text=element_text(size = 20))
+  theme(text=element_text(size = 20)) +
+    scale_x_continuous(breaks = unique(results_combined$n))
 }
 
-bias_plot <- function(results_combined){
+bias_plot <- function(results_combined,k){
   results_combined %>%
-    filter(sigma == 7) %>% 
-    melt(id.vars = c("data", "rep", "kind", "n", "a")) %>% 
+    filter(sigma == 7& sparsity == k) %>% 
+    melt(id.vars = c("data", "rep",  "n", "a")) %>% 
     filter(grepl("bias", variable) & !grepl("bprobit", variable)) %>% 
     mutate(variable = factor(variable, 
                              levels = c("bart_uncali_bias", "nn2_bias", "rf_uncali_bias", "probit_bias"),
                              labels = c("BART", "NN", "RF", "Probit"))) %>% 
-    group_by(data, kind, n, variable) %>% 
+    group_by(data, a, n, variable) %>% 
     summarise(value = mean(value)) %>% 
     ggplot() +
     geom_line(aes(x = n, y = value, colour = factor(variable), linetype = factor(variable), group = factor(variable))) +
     geom_point(aes(x = n, y = value, colour = factor(variable))) +
     geom_hline(aes(yintercept = 0)) +
-    facet_grid(kind~data, scales = "free_y") +
+    facet_grid(a~data, scales = "free_y") +
     labs(x = "n", y = "Bias (median)", colour = "Model", linetype = "Model") +
     scale_colour_grey("Model", start = 0, end = .8) +
     scale_linetype_manual("Model", values = c("solid", "solid", "solid", "dashed")) +
-    theme_bw()
+    theme_bw()+
+    theme(text=element_text(size = 20)) +
+    scale_x_continuous(breaks = unique(results_combined$n))
 }
 
-rmse_plot <- function(results_combined, a1){
+mae_plot <- function(results_combined,k){
+  results_combined %>%
+    filter(sigma == 7& sparsity == k) %>% 
+    melt(id.vars = c("data", "rep",  "n", "a")) %>% 
+    filter(grepl("bias", variable) & !grepl("bprobit", variable)) %>% 
+    mutate(variable = factor(variable, 
+                             levels = c("bart_uncali_bias", "nn2_bias", "rf_uncali_bias", "probit_bias"),
+                             labels = c("BART", "NN", "RF", "Probit"))) %>% 
+    group_by(data, a, n, variable) %>% 
+    summarise(value = mean(abs(value))) %>% 
+    ggplot() +
+    geom_line(aes(x = n, y = value, colour = factor(variable), linetype = factor(variable), group = factor(variable))) +
+    geom_point(aes(x = n, y = value, colour = factor(variable))) +
+    #geom_hline(aes(yintercept = 0)) +
+    facet_grid(a~data, scales = "free_y") +
+    labs(x = "n", y = "MAE (median)", colour = "Model", linetype = "Model") +
+    scale_colour_grey("Model", start = 0, end = .8) +
+    scale_linetype_manual("Model", values = c("solid", "solid", "solid", "dashed")) +
+    theme_bw()+
+    theme(text=element_text(size = 20)) +
+    scale_x_continuous(breaks = unique(results_combined$n))
+}
+
+rmse_plot <- function(results_combined, k){
 results_combined %>%
-    filter(sigma == 7) %>% 
-  melt(id.vars = c("data", "rep", "kind", "n", "a")) %>% 
+    filter(sigma == 7 & sparsity == k) %>% 
+  melt(id.vars = c("data", "rep", "n", "a")) %>% 
   filter(grepl("mse", variable) & ! grepl("bprobit", variable)) %>% 
   mutate(variable = factor(variable, 
                            levels = c("bart_uncali_mse", "nn2_mse", "rf_uncali_mse", "probit_mse"),
-                           labels = c("BART", "NN", "RF", "PROBIT"))) %>% 
+                           labels = c("BART", "NN", "RF", "Probit"))) %>% 
   group_by(data, a, n, variable) %>% 
   summarise(value = mean(value)) %>% 
   ggplot() +
-  geom_line(aes(x = n, y = value, colour = factor(variable), group = factor(variable))) +
+  geom_line(aes(x = n, y = value, colour = factor(variable), group = factor(variable), linetype = factor(variable))) +
   geom_point(aes(x = n, y = value, colour = factor(variable))) +
+    scale_linetype_manual("Model", values = c("solid", "solid", "solid", "dashed")) +
   facet_grid(a~data, scales = "free_y") +
   labs(x = "n", y = "RMSE") +
   scale_colour_grey("Model",start = 0, end = .8) +
-  theme_bw()
+  theme_bw()+
+    theme(text=element_text(size = 20)) +
+    scale_x_continuous(breaks = unique(results_combined$n))
 }

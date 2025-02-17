@@ -13,6 +13,7 @@ library(BART)
 library(bartMachine)
 library(logistf)
 library(Iso)
+library(rstanarm)
 source("src/functions.R")
 
 numCores <- detectCores() - 1  # Use one less than the total number of cores
@@ -29,9 +30,9 @@ comb <- expand.grid(a,sigma,n) %>% mutate(keep = paste0(Var1, Var2, Var3)) %>% p
 registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 
 results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
-  foreach(reps = 1:25) %dopar% {
+  foreach(reps = 1:100) %dopar% {
     #introduce sparsity into prediction matrix?
-    sparsity = FALSE
+    sparsity = TRUE
     #covariates distribution
     a <- as.numeric(substr(comb, 1,1)); b = 1
     #error variance
@@ -124,19 +125,20 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
         x_list <- xa_list[!xa_list == "A"]
         f <- as.formula(paste0(c, "~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
         f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1 + X.2 + X.3 + X.4 + X.5 +X.6 + X.7 + X.8 + X.9 + X.10"))
-      } else{ #sparsity ==FALSE
-        if (! c   %in% c("WTP_friedman", "WTP_bin")) { # Case when the column is NOT "WTP_friedman"
+      } else{ #NO SPARSITY AND (STEP OR NORMAL)
+        if (c   %in% c("WTP_step", "WTP_normal")) { # Case when the column is NOT "WTP_friedman"
           xa_list <- c("X.1", "A")
           x_list <- xa_list[!xa_list == "A"]
           f <- as.formula(paste0(c, "~ A + X.1"))
           f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1"))
-        }else{ #Friedman
+        }else{ #NO SPARSITY AND (FRIEDMAN  OR BINARY)
           xa_list <-  c("A", paste0("X.", 1:5))
           x_list <- xa_list[!xa_list == "A"]
           f <- as.formula(paste0(c, "~ A + X.1 + X.2 + X.3 + X.4 + X.5"))
           f_rf <- as.formula(paste0("as.factor(",c, ")~ A + X.1 + X.2 + X.3 + X.4 + X.5"))
         }   
-      } 
+      }
+      
       if (c == "WTP_bin"){
         train<- make_bins(train)
         test<- make_bins(test)
@@ -157,6 +159,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
           mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
         
         # Standardize test sets using training means and standard deviations
+        #only done for the covariates (not A)
         bprobit_test <- test %>%
           mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
         
@@ -166,7 +169,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
         bprobit_test_notends <- test_notends %>%
           mutate(across(starts_with("X"), ~ (. - train_means[[cur_column()]]) / train_sds[[cur_column()]]))
         
-      }else{
+      }else{ #if X's are binary
         bprobit_test <- test
         bprobit_train <- train
         bprobit_test_ends <- test_ends
@@ -174,14 +177,14 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
         
       }   
       
-      
+      #neural network train/test matrices equal to bprobits (x's standardized)
       n_train <- bprobit_train
       n_test <- bprobit_test
       n_test_ends <- bprobit_test_ends
       n_test_notends <- bprobit_test_notends
       
+      #neural network also needs the A standardized
       n_train$A <- (n_train$A - mean(A))/sd(A)
-      
       n_test$A <- (n_test$A - mean(A))/sd(A)
       n_test_ends$A <- (n_test_ends$A - mean(A))/sd(A)
       n_test_notends$A <- (n_test_notends$A - mean(A))/sd(A)
@@ -289,9 +292,10 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       if(r == 1){
       all[[j]] <- data.frame(n = n - 500,
                               data = gsub("WTP_", "", c), 
-                              rep = r,
                              a = ifelse(a == 1, "symmetric", "asymmetric"),
                               sigma = sigma_1,
+                             sparsity = sparsity,
+                             rep = r,
                               true = test.wtp[, c],
                               #bart_q = tdat_long2$wtp_q,
                               bart_uncali_q = tdat_long2_uncali$wtp_q,
@@ -305,8 +309,9 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       results[[j]] <- data.frame(n = n - 500,
                                  data = gsub("WTP_", "", c),
                                  sigma = sigma_1,
-                                 rep = r,
+                                 sparsity = sparsity,
                                  a = ifelse(a == 1, "symmetric", "asymmetric"),
+                                 rep = r,
                                  #average individual mse
                                  #bart_mse = mean((tdat_long2$wtp_q - test.wtp[, c])^2)^0.5,
                                  bart_uncali_mse = mean((tdat_long2_uncali$wtp_q - test.wtp[, c])^2)^0.5,
@@ -338,7 +343,7 @@ all_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply
 results_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$results))))
 
 
-sparsity = FALSE
+sparsity = TRUE
 
 saveRDS(all_combined, paste0("all_combined_",sparsity,".RDS"))
 saveRDS(results_combined, paste0("results_combined_",sparsity,".RDS"))

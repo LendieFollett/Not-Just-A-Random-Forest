@@ -11,7 +11,7 @@ results_combined <- rbind(results_combinedTRUE, results_combinedFALSE)
 
 
 results_combined <- results_combined %>% 
-  select(n, data, sigma,a,kind, rep, bart_uncali_mse, nn2_mse, rf_uncali_mse, probit_mse, bprobit_mse,
+  select(n, data, sigma,a,sparsity, rep, bart_uncali_mse, nn2_mse, rf_uncali_mse, probit_mse, bprobit_mse,
          bart_uncali_bias, nn2_bias, rf_uncali_bias, probit_bias, bprobit_bias) %>% 
   mutate(data = factor(data, levels = c("normal", "friedman", "step", "bin"),
                        labels = c("Linear", "Friedman", "Step", "Binary"))
@@ -19,25 +19,31 @@ results_combined <- results_combined %>%
 
 
 # COMPARING RMSE - need to also look at bias
-p <- rmse_ratio_plot(results_combined, k = "Sparse") + ggtitle("Sparse");p
-ggsave(paste0("RMSE_ratios_",sparsity,"_asym.pdf"),plot = p, width = 20, height = 15)
-p <- rmse_ratio_plot(results_combined, k = "Not Sparse")+ ggtitle("Not Sparse");p
-ggsave(paste0("RMSE_ratios_",sparsity,"_sym.pdf"),plot = p, width = 20, height = 15)
+p <- rmse_ratio_plot(results_combined, k = TRUE) + ggtitle("Sparse");p
+ggsave(paste0("RMSE_ratios_",TRUE,".pdf"),plot = p, width = 20, height = 15)
+p <- rmse_ratio_plot(results_combined, k = FALSE)+ ggtitle("Not Sparse");p
+ggsave(paste0("RMSE_ratios_",FALSE,".pdf"),plot = p, width = 20, height = 15)
 
 
+#bias
+p <- bias_plot(results_combined, k=TRUE)+ ggtitle("Sparse");p
+ggsave(paste0("bias_median_", TRUE,"_.pdf"), width = 20, height = 15)
+p <- bias_plot(results_combined, k=FALSE)+ ggtitle("Not Sparse");p
+ggsave(paste0("bias_median_", FALSE, "_.pdf"), width = 20, height = 15)
 
-p <- bias_plot(results_combined, a1 = "asymmetric");p
-ggsave(paste0("bias_median_", sparsity,"_asym.pdf"), width = 20, height = 15)
-p <- bias_plot(results_combined, a = "symmetric");p
-ggsave(paste0("bias_median_", sparsity, "_sym.pdf"), width = 20, height = 15)
+#mean absolute error
+p <- mae_plot(results_combined, k=TRUE)+ ggtitle("Sparse");p
+ggsave(paste0("mae_median_", TRUE,"_.pdf"), width = 20, height = 15)
+p <- mae_plot(results_combined, k=FALSE)+ ggtitle("Not Sparse");p
+ggsave(paste0("mae_median_", FALSE, "_.pdf"), width = 20, height = 15)
 
 
 #LRF TO DO: MAKE PROBIT A DASHED LINE
 #is this one necessary? it's just the first plot, but not relative to probit
-p <- rmse_plot(results_combined,a1="asymmetric");p
-ggsave(paste0("RMSE_", sparsity, "_asym.pdf"), width = 20, height = 15)
-p <- rmse_plot(results_combined,a1="symmetric");p
-ggsave(paste0("RMSE_", sparsity, "_sym.pdf"), width = 20, height = 15)
+p <- rmse_plot(results_combined,k=TRUE);p
+ggsave(paste0("RMSE_", TRUE, ".pdf"), width = 20, height = 15)
+p <- rmse_plot(results_combined,k=FALSE);p
+ggsave(paste0("RMSE_", FALSE, ".pdf"), width = 20, height = 15)
 
 
 
