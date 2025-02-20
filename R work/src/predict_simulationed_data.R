@@ -328,7 +328,23 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                                  rf_bias = median(tdatrf_long2$wtp_q) - median(test.wtp[, c]),
                                  rf_uncali_bias = median(tdatrf_uncali_long2$wtp_q) - median(test.wtp[, c]),
                                  probit_bias = median(WTP_logit) - median(test.wtp[, c]),
-                                 bprobit_bias = median(WTP_bprobit) - median(test.wtp[, c]))
+                                 bprobit_bias = median(WTP_bprobit) - median(test.wtp[, c]),
+                                 
+                                 bart_uncali_bias_mn = mean(tdat_long2_uncali$wtp_q) - mean(test.wtp[, c]),
+                                 nn2_bias_mn = mean(tdatn2_long2$wtp_q) - mean(test.wtp[, c]),
+                                 rf_bias_mn = mean(tdatrf_long2$wtp_q) - mean(test.wtp[, c]),
+                                 rf_uncali_bias_mn = mean(tdatrf_uncali_long2$wtp_q) - mean(test.wtp[, c]),
+                                 probit_bias_mn = mean(WTP_logit) - mean(test.wtp[, c]),
+                                 bprobit_bias_mn = mean(WTP_bprobit) - mean(test.wtp[, c]),
+                                 
+                                 mean_true = mean(test.wtp[,c]),
+                                 mean_bart = mean(tdat_long2_uncali$wtp_q),
+                                 mean_nn = mean(tdatn2_long2$wtp_q),
+                                 mean_rf = mean(tdatrf_long2$wtp_q),
+                                 mean_rf_uncali = mean(tdatrf_uncali_long2$wtp_q),
+                                 mean_probit = mean(WTP_logit),
+                                 mean_bprobit = mean(WTP_bprobit)
+                                 )
       
     }
     all <- do.call(rbind, all)

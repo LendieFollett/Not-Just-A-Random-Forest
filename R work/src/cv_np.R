@@ -5,10 +5,10 @@ library(reshape2)
 library(rstanarm)
 library(tidyr)
 
-source("functions.R")
+source("src/functions.R")
 
 
-d <- read.csv("Maui_CV/Qualtrics_FullSample_CV.csv")
+d <- read.csv("raw/Qualtrics_FullSample_CV.csv")
 str(d)
 
 d <- d%>%
@@ -66,7 +66,12 @@ samps <- as.data.frame(bprobit)
 
 
 bresults <- get_wtp(pred_matrix = (1-mb$prob.test) %>%  t() )
-lrresults <- get_wtp(pred_matrix = 1-posterior_epred(bprobit,  test_notends[,-1] ) %>% t())
+#lrresults <- get_wtp(pred_matrix = 1-posterior_epred(bprobit,  test_notends[,-1] ) %>% t())
+
+
+bcoefs <- as.data.frame(bprobit)
+WTP_bprobit <- -bcoefs["(Intercept)"] / bcoefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-bcoefs[x_list] / bcoefs["A"]) 
+
 
 tdat_long2 <- bresults$wtp
 tdatlr_long2 <- lrresults$wtp

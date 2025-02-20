@@ -192,7 +192,7 @@ make_bins <- function(df){
 
 rmse_ratio_plot <- function(results_combined, k){
 results_combined %>%
-    filter(sigma == 7 & sparsity == k) %>% 
+    filter(sigma == 15 & kind == k) %>% 
   group_by(data,n,a) %>%
   summarise(
     #bart_cali = mean(bart_mse) / mean(probit_mse),
@@ -236,8 +236,8 @@ results_combined %>%
 
 bias_plot <- function(results_combined,k){
   results_combined %>%
-    filter(sigma == 7& sparsity == k) %>% 
-    melt(id.vars = c("data", "rep",  "n", "a")) %>% 
+    filter(sigma == 15& kind == k) %>% 
+    melt(id.vars = c("data", "rep",  "n", "a", "kind", "sigma")) %>% 
     filter(grepl("bias", variable) & !grepl("bprobit", variable)) %>% 
     mutate(variable = factor(variable, 
                              levels = c("bart_uncali_bias", "nn2_bias", "rf_uncali_bias", "probit_bias"),
@@ -245,8 +245,8 @@ bias_plot <- function(results_combined,k){
     group_by(data, a, n, variable) %>% 
     summarise(value = mean(value)) %>% 
     ggplot() +
-    geom_line(aes(x = n, y = value, colour = factor(variable), linetype = factor(variable), group = factor(variable))) +
-    geom_point(aes(x = n, y = value, colour = factor(variable))) +
+    geom_line(aes(x = n, y = abs(value), colour = factor(variable), linetype = factor(variable), group = factor(variable))) +
+    geom_point(aes(x = n, y = abs(value), colour = factor(variable))) +
     geom_hline(aes(yintercept = 0)) +
     facet_grid(a~data, scales = "free_y") +
     labs(x = "n", y = "Bias (median)", colour = "Model", linetype = "Model") +
@@ -259,8 +259,9 @@ bias_plot <- function(results_combined,k){
 
 mae_plot <- function(results_combined,k){
   results_combined %>%
-    filter(sigma == 7& sparsity == k) %>% 
-    melt(id.vars = c("data", "rep",  "n", "a")) %>% 
+    filter(data != "Step") %>% 
+    filter(sigma == 7& kind == k) %>% 
+    melt(id.vars = c("data", "rep",  "n", "a", "kind", "sigma")) %>% 
     filter(grepl("bias", variable) & !grepl("bprobit", variable)) %>% 
     mutate(variable = factor(variable, 
                              levels = c("bart_uncali_bias", "nn2_bias", "rf_uncali_bias", "probit_bias"),
@@ -277,13 +278,16 @@ mae_plot <- function(results_combined,k){
     scale_linetype_manual("Model", values = c("solid", "solid", "solid", "dashed")) +
     theme_bw()+
     theme(text=element_text(size = 20)) +
-    scale_x_continuous(breaks = unique(results_combined$n))
+    scale_x_continuous(breaks = unique(results_combined$n)) #+
+    #scale_y_continuous(limits = c(0,4))
 }
+
 
 rmse_plot <- function(results_combined, k){
 results_combined %>%
-    filter(sigma == 7 & sparsity == k) %>% 
-  melt(id.vars = c("data", "rep", "n", "a")) %>% 
+    filter(data != "Step") %>% 
+    filter(sigma == 7 & kind == k) %>% 
+  melt(id.vars = c("data", "rep", "n", "a", "kind", "sigma")) %>% 
   filter(grepl("mse", variable) & ! grepl("bprobit", variable)) %>% 
   mutate(variable = factor(variable, 
                            levels = c("bart_uncali_mse", "nn2_mse", "rf_uncali_mse", "probit_mse"),
