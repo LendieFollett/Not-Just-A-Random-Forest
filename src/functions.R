@@ -21,7 +21,7 @@ get_wtp <- function(pred_matrix){
   tdat <-testb %>%
     rbind(test_ends) %>% #tack on endpoints
     group_by(ID) %>% 
-    arrange(ID, (CV_donate_bid)) %>% 
+    arrange(CV_donate_bid, .by_group = TRUE) %>% 
     # calculate differences in consecutive probabilities
     # (some will be negative, that is taken care of below)
      mutate(across(starts_with("Rep"), ~  pava(.x, decreasing=TRUE))) #%>% #Rep = P(said no)

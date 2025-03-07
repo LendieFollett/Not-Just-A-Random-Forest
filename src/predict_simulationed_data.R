@@ -269,6 +269,15 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       bcoefs <- as.data.frame(bprobit) %>% apply(2, mean)
       WTP_bprobit <- -bcoefs["(Intercept)"] / bcoefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-bcoefs[x_list] / bcoefs["A"]) 
       
+  
+      WTP_bprobit2 <- get_wtp_point(pred_vector = predict(bprobit, newdata=bprobit_test_notends[colnames(bprobit_train)[1:11]], type="response"),
+                                    test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
+      
+      #get_wtp_point gives effectively the same solution as the standard probit formula
+      #what about get_wtp(pred_matrix = posterior_epred(bprobit,  test_notends[,-1] ) %>% t())
+     #WTP_bprobit3 <- get_wtp2(pred_matrix= posterior_epred(bprobit,  test_notends[,-1] ) %>% t(), 
+      #         test_ends,test_notends, ndpost=500)
+      #get_wtp2 and get_wtp_point result in identical numbers
       ################################################################
       #FIT NEURAL NETWORK
       ################################################################ 

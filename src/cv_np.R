@@ -8,18 +8,22 @@ library(tidyr)
 source("src/functions.R")
 
 
-d <- read.csv("raw/Qualtrics_FullSample_CV.csv")
+d <- read.csv("raw/BART_restricted.csv")
+#d <- read.csv("raw/Qualtrics_FullSample_CV.csv")
+#d <- read.csv("raw/Qualtrics_FullSample_CV.csv")
 str(d)
 
+
+
 d <- d%>%
-  select(CV_donate_yes, CV_donate_bid, hh_income, age,conservative_politics, female)
+  select(CV_donate_yes, CV_donate_bid, hh_income, age,conservative_politics, female) 
 
 d <- d[complete.cases(d),]
 #test set: each person / unique combination of demographics needs
 #to be paired with each CV_donate_bid, and then the endpoints as well
 test <- d %>%
   select(hh_income, age,conservative_politics, female)
-#filter(CV_donate_bid %in% c(25,100, 500, 1000, 2000))
+  #filter(CV_donate_bid %in% c(25,100, 500, 1000, 2000))
 test <- test[complete.cases(test),]
 
 # Add the new columns to the `ends` data frame
@@ -37,32 +41,34 @@ test_ends <- test2 %>% filter(CV_donate_bid %in% c(max(pts), min(pts)))
 test_notends <- test2 %>% filter(!CV_donate_bid %in% c(max(pts), min(pts)))
 
 p <- d %>% 
-  group_by(CV_donate_bid) %>% 
+  group_by(CV_donate_bid, hh_income) %>% 
   summarise(Pyes = mean(CV_donate_yes),
             n = n()) %>% 
   ggplot() + 
-  geom_line(aes(x = CV_donate_bid, y = Pyes)) +
-  scale_y_continuous(limits = c(0, .7))
-
+  geom_line(aes(x = CV_donate_bid, y = Pyes, colour = as.factor(hh_income))) +
+  scale_y_continuous(limits = c(0, .7)) +
+  facet_wrap(~hh_income)
+p
 
 mb <- pbart(x.train = d[,-1],
-            y.train = d[,1],
-            x.test = test_notends[,-1],
-            ntree = 200,
-            ndpost = 1000,nskip = 5000)
+             y.train = d[,1],
+             x.test = test_notends[,-1],
+             ntree = 200,
+             ndpost = 1000,nskip = 5000)
 
-bprobit <- stan_glm(CV_donate_yes ~ CV_donate_bid +hh_income  + age + conservative_politics + female,
+
+bprobit <- stan_glm(CV_donate_yes ~ CV_donate_bid +hh_income  + age + conservative_politics + female + age,
                     data = d , 
                     family = binomial(link = "probit"), 
                     prior = normal(0, 1), 
                     prior_intercept = normal(0, 1), 
                     chains = 1, iter = 2000,
                     init = "0")
-x_list <- c("hh_income", "age", "conservative_politics", "female")
+#x_list <- c("hh_income", "age", "conservative_politics", "female")
 
 #average WTP per person
-WTP_logit <- -coefs["(Intercept)"] / coefs["CV_donate_bid"] + as.matrix(d[, x_list])%*%as.matrix(-coefs[x_list] / coefs["CV_donate_bid"])
-
+#WTP_logit <- -coefs["(Intercept)"] / coefs["CV_donate_bid"] + as.matrix(d[, x_list])%*%as.matrix(-coefs[x_list] / coefs["CV_donate_bid"])
+#d<- model.matrix(CV_donate_yes~CV_donate_bid +hh_income  + age + conservative_politics + female + age, data=d %>% select(CV_donate_bid,CV_donate_yes,hh_income  , age , conservative_politics , female , age))
 #posterior sampling distributions of WTP for each person
 bcoefs <- as.data.frame(bprobit)
 bcoefs_x <- names(bcoefs)[-c(1,2)]
@@ -70,58 +76,57 @@ a <- t(-bcoefs["(Intercept)"] / bcoefs["CV_donate_bid"])
 b <- as.matrix(d[,bcoefs_x]) %*%t(-bcoefs[bcoefs_x]/bcoefs[,"CV_donate_bid"])
 WTP_bprobit <- (b + matrix(a, nrow = nrow(b), ncol = ncol(b), byrow = TRUE)) %>%
   data.frame() %>% 
-  mutate(ID = as.character(c(1:975))) %>% 
+  mutate(ID = as.character(c(1:978))) %>% 
   melt(measure.vars = paste0("X", 1:1000), value.name = "wtp_q") %>% 
   mutate(wtp_q = pmax(wtp_q, 0) )
+  
 
 
+WTP_bprobit_means <- WTP_bprobit %>% group_by(ID) %>% summarize(mean = mean(wtp_q)) %>% pull(mean) 
 
-apply(WTP_bprobit, 1, median) %>% summary
 
+bresults <- get_wtp(pred_matrix = mb$prob.test %>%  t() )
 
-bresults <- get_wtp(pred_matrix = (1-mb$prob.test) %>%  t() )
-#lrresults <- get_wtp(pred_matrix = 1-posterior_epred(bprobit,  test_notends[,-1] ) %>% t())
-lrresults <- list(wtp =WTP_bprobit,
-                  mean_wtp = data.frame(ID = 1:975,
-                                        wtp_q = WTP_logit))
+lrresults <- get_wtp(pred_matrix = posterior_epred(bprobit,  test_notends[,-1] ) %>% t())
+#lrresults <- list(wtp =WTP_bprobit,
+#                  mean_wtp = WTP_bprobit_means)
 
 tdat_long2 <- bresults$wtp
 tdatlr_long2 <- lrresults$wtp
+#ran this analysis with get_wtp and get_wtp2 - those provide same estimates
+#both are very different from traditional formula
+
+#problem: using the traditional probit WTP formula (coefficient based)
+#we get very different WTP estimates than taking that 
+#same probit model and using quadtrature methods
+#next step: differences between get_wtp and get_wtp2?
 
 
-#BART
+
 tdat_long2 %>% 
   merge(test, by = "ID") %>% 
   filter(age <80) %>% 
   ggplot() +
-  geom_density(aes(x = wtp_q, fill = as.factor(hh_income)), alpha = I(.5), adjust = 2) +
-  facet_grid(conservative_politics~age, scales = "free")+
-  scale_fill_brewer("Income") +
-  labs(title="BART") +
-  theme_bw()
+  geom_boxplot(aes(y = wtp_q, x = as.factor(hh_income), colour = conservative_politics %>% as.factor) , alpha = I(.5)) +
+  facet_wrap(~age, scales = "free")+
+  theme_bw() +
+  scale_colour_brewer("Politics", type = "qual")+
+  labs(x = "Income", y = "WTP (US $)") +
+  ggtitle("BART-based WTP estimates")
+ggsave("bart_exploratory.pdf")
 
-ggsave("bird_wtp_demographics.pdf")
-p1 <- tdat_long2 %>% 
+tdatlr_long2 %>% 
   merge(test, by = "ID") %>% 
   filter(age <80) %>% 
   ggplot() +
-  geom_boxplot(aes(y = wtp_q, x = as.factor(hh_income), colour = female %>% as.factor) , alpha = I(.5)) +
+  geom_boxplot(aes(y = wtp_q, x = as.factor(hh_income), colour = conservative_politics %>% as.factor) , alpha = I(.5)) +
   facet_wrap(~age, scales = "free")+
+  scale_colour_brewer("Politics", type = "qual")+
   theme_bw() +
-  labs(x = "Income", y = "WTP (US $)")
-p1
+  labs(x = "Income", y = "WTP (US $)")+
+  ggtitle("Probit-based WTP estimates")
+ggsave("probit_exploratory.pdf")
 
-#LOGISTIC REGRESSION
-p2 <- tdatlr_long2 %>%
-  merge(test, by = "ID") %>% 
-  ggplot() +
-  geom_density(aes(x = wtp_q, fill = as.factor(hh_income)), alpha = I(.5)) +
-  facet_wrap(~age, scales = "free")+
-  scale_fill_brewer("Income") +
-  theme_bw()+
-  labs(title="Bayesian Logistic Regression")
-library(gridExtra)
-grid.arrange(p1,p2, ncol = 2) 
 
 
 #make demand curve
@@ -213,8 +218,8 @@ ggsave("bird_wtp_envelope.pdf")
 mpr <- stan_glm(CV_donate_yes ~ CV_donate_bid + hh_income + age, 
                 data = d, 
                 family = binomial(link = "probit"), 
-                # prior = normal(0, 2.5), # Define priors
-                #  prior_intercept = normal(0, 5), 
+               # prior = normal(0, 2.5), # Define priors
+              #  prior_intercept = normal(0, 5), 
                 chains = 1, iter = 2000)
 samps <- as.data.frame(mpr)
 wtp_probit <- as.matrix(-samps[,c("(Intercept)")]/ samps[,"CV_donate_bid"]) + as.matrix(samps[,c("hh_income", "age")]/ samps[,"CV_donate_bid"]) %*% t(as.matrix(d[,c(3,4)])) 
