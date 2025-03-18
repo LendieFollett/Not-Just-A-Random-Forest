@@ -10,7 +10,7 @@ library(reshape2)
 library(randomForest)
 library(caret)
 library(BART)
-library(bartMachine)
+#library(bartMachine)
 library(logistf)
 library(Iso)
 library(rstanarm)
@@ -18,10 +18,12 @@ source("src/functions.R")
 
 numCores <- detectCores() - 1  # Use one less than the total number of cores
 cl <- makeCluster(numCores)
+
 registerDoParallel(cl)
 
 a <- c(1,3) #1 = uniform, 3 = beta(3,1) (asymmetric)
 sigma <- c(1,2)  # low high
+
 n <- c(1500,1000, 500, 250) + 500
 #reserve 500 for the test set
 
@@ -29,10 +31,13 @@ comb <- expand.grid(a,sigma,n) %>% mutate(keep = paste0(Var1, Var2, Var3)) %>% p
 
 registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 
+#TO DO
+## ADD ERROR VARIABILITY ONTO THE WTP PREDICTIONS FOR THE WTP_MEANS (saved in all)
+
 results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
   foreach(reps = 1:100) %dopar% {
     #introduce sparsity into prediction matrix?
-    sparsity = TRUE
+    sparsity = FALSE
     #covariates distribution
     a <- as.numeric(substr(comb, 1,1)); b = 1
     #error variance
@@ -52,7 +57,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
     nP <- 10
   
     #intercept 
-    beta_N0 <- 90 
+    beta_N0 <- 80 
     beta_linear <- 30
     
     # X_i drawn from U[-1, 1]
@@ -63,7 +68,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
     WTP_normal <- beta_N0 + beta_linear * X[,1] + epsilon_Ni
     
     #Friedman
-    WTP_friedman <-  10 +  5*(10*sin(pi*X[,1]*X[,2]) + 20*(X[,3] - 0.5)^2 + 10*X[,4] + 5*X[,5]) + rnorm(n, 0, sigma_2)
+    WTP_friedman <-  beta_N0 +  2*(10*sin(pi*X[,1]*X[,2]) + 20*(X[,3] - 0.5)^2 + 10*X[,4] + 5*X[,5]) + rnorm(n, 0, sigma_2)
     
     # Step function, normal error
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
@@ -85,7 +90,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
     
     # Print first few rows
     head(data)
-    A <- c(25, 50, 75, 100, 125, 150)
+    A <- c(50, 75, 100, 125, 150)
     A_samps <- sample(A, size = nrow(data), replace=TRUE) %>% as.matrix
     
     survey <- data.frame(X = X,
@@ -196,7 +201,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       b <- pbart(x.train = train[, xa_list],
                  y.train = train[, c],
                  x.test = test_notends[, xa_list],
-                 ntree = 200,#cv$num_trees,
+                 ntree = 100,#cv$num_trees,
                  k = 2,#cv$k,
                  ndpost = ndpost, 
                  nskip = 2000)
@@ -298,7 +303,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       
       ################################################################
       
-      if(r == 1){
+      if(r <=10){
       all[[j]] <- data.frame(n = n - 500,
                               data = gsub("WTP_", "", c), 
                              a = ifelse(a == 1, "symmetric", "asymmetric"),
@@ -321,6 +326,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                                  sparsity = sparsity,
                                  a = ifelse(a == 1, "symmetric", "asymmetric"),
                                  rep = r,
+                                 
                                  #average individual mse
                                  #bart_mse = mean((tdat_long2$wtp_q - test.wtp[, c])^2)^0.5,
                                  bart_uncali_mse = mean((tdat_long2_uncali$wtp_q - test.wtp[, c])^2)^0.5,
@@ -368,7 +374,7 @@ all_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply
 results_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$results))))
 
 
-sparsity = TRUE
+sparsity = FALSE
 
 saveRDS(all_combined, paste0("all_combined_",sparsity,".RDS"))
 saveRDS(results_combined, paste0("results_combined_",sparsity,".RDS"))
