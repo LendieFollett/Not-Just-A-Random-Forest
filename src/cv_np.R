@@ -9,7 +9,7 @@ library(Iso)
 source("src/functions.R")
 
 
-d <- read.csv("raw/BART_restricted.csv")
+d <- read.csv("/Users/000766412/Dropbox/BART/NJARF_raw/BART_restricted.csv")
 #d <- read.csv("raw/Qualtrics_FullSample_CV.csv")
 #d <- read.csv("raw/Qualtrics_FullSample_CV.csv")
 str(d)
