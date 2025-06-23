@@ -23,10 +23,10 @@ results_combined <- results_combined %>%
 
 # COMPARING RMSE - need to also look at bias
 p <- rmse_ratio_plot(results_combined, k = "Sparse", sig = 7) + labs(caption="Sigma = 7, sparse coefficient vector");p
-ggsave(paste0("RMSE_ratios_",TRUE,"_7",".pdf"),plot = p, width = 20, height = 15)
+ggsave(paste0("RMSE_ratios_",TRUE,"_7",".pdf"),plot = p, width = 15, height = 10)
 
 p <- rmse_ratio_plot(results_combined, k = "Sparse", sig = 15) + labs(caption="Sigma = 15, sparse coefficient vector");p
-ggsave(paste0("RMSE_ratios_",TRUE,"_15",".pdf"),plot = p, width = 20, height = 15)
+ggsave(paste0("RMSE_ratios_",TRUE,"_15",".pdf"),plot = p, width = 15, height = 10)
 
 p <- rmse_ratio_plot(results_combined, k = "Not Sparse", sig = 7)+ labs(caption="Sigma = 7, full coefficient vector");p
 ggsave(paste0("RMSE_ratios_",FALSE,"_7",".pdf"),plot = p, width = 20, height = 15)
@@ -35,16 +35,16 @@ p <- rmse_ratio_plot(results_combined, k = "Not Sparse", sig = 15)+ labs(caption
 ggsave(paste0("RMSE_ratios_",FALSE,"_15",".pdf"),plot = p, width = 20, height = 15)
 
 #LRF TO DO: MAKE PROBIT A DASHED LINE
-p <- rmse_plot(results_combined, k = "Sparse", sig = 7) + labs(caption="Sigma = 7, sparse coefficient vector");p
+p <- rmse_plot(results_combined, k = "Sparse", sig = 7)# + labs(caption="Sigma = 7, sparse coefficient vector");p
 ggsave(paste0("RMSE_",TRUE,"_7",".pdf"),plot = p, width = 20, height = 15)
 
-p <- rmse_plot(results_combined, k = "Sparse", sig = 15) + labs(caption="Sigma = 15, sparse coefficient vector");p
+p <- rmse_plot(results_combined, k = "Sparse", sig = 15) #+ labs(caption="Sigma = 15, sparse coefficient vector");p
 ggsave(paste0("RMSE_",TRUE,"_15",".pdf"),plot = p, width = 20, height = 15)
 
-p <- rmse_plot(results_combined, k = "Not Sparse", sig = 7)+ labs(caption="Sigma = 7, full coefficient vector");p
+p <- rmse_plot(results_combined, k = "Not Sparse", sig = 7)#+ labs(caption="Sigma = 7, full coefficient vector");p
 ggsave(paste0("RMSE_",FALSE,"_7",".pdf"),plot = p, width = 20, height = 15)
 
-p <- rmse_plot(results_combined, k = "Not Sparse", sig = 15)+ labs(caption="Sigma = 15, full coefficient vector");p
+p <- rmse_plot(results_combined, k = "Not Sparse", sig = 15)#+ labs(caption="Sigma = 15, full coefficient vector");p
 ggsave(paste0("RMSE_",FALSE,"_15",".pdf"),plot = p, width = 20, height = 15)
 
 

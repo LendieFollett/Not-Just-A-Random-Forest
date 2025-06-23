@@ -4,6 +4,7 @@ library(BART)
 library(reshape2)
 library(rstanarm)
 library(tidyr)
+library(Iso)
 
 source("src/functions.R")
 
@@ -54,7 +55,7 @@ mb <- pbart(x.train = d[,-1],
              y.train = d[,1],
              x.test = test_notends[,-1],
              ntree = 200,
-             ndpost = 1000,nskip = 5000)
+             ndpost = 5000,nskip = 5000)
 
 
 bprobit <- stan_glm(CV_donate_yes ~ CV_donate_bid +hh_income  + age + conservative_politics + female + age,
@@ -102,18 +103,20 @@ tdatlr_long2 <- lrresults$wtp
 #next step: differences between get_wtp and get_wtp2?
 
 
-
 tdat_long2 %>% 
   merge(test, by = "ID") %>% 
   filter(age <80) %>% 
+  mutate(age_f = factor(age, levels = c(20,30,40,50,60,70),
+                        labels = c("18-24", "25-34", "35-44",
+                                   "45-54", "55-64", "65-74"))) %>% 
   ggplot() +
   geom_boxplot(aes(y = wtp_q, x = as.factor(hh_income), colour = conservative_politics %>% as.factor) , alpha = I(.5)) +
-  facet_wrap(~age, scales = "free")+
-  theme_bw() +
-  scale_colour_brewer("Politics", type = "qual")+
+  facet_wrap(~age_f, scales = "free")+
+  theme_bw(base_size = 16)+
+  scale_colour_grey("Conserv.\nPolitics")+
   labs(x = "Income", y = "WTP (US $)") +
   ggtitle("BART-based WTP estimates")
-ggsave("bart_exploratory.pdf")
+ggsave("bart_exploratory.pdf", width = 12, height = 10)
 
 tdatlr_long2 %>% 
   merge(test, by = "ID") %>% 
@@ -127,8 +130,99 @@ tdatlr_long2 %>%
   ggtitle("Probit-based WTP estimates")
 ggsave("probit_exploratory.pdf")
 
+#table
+table_dat <- tdat_long2 %>% 
+  merge(test, by = "ID") %>% 
+  group_by(hh_income, age, conservative_politics, female) %>% 
+  summarise(mean_wtp = mean(wtp_q),
+            lower = quantile(wtp_q, .025),
+            upper = quantile(wtp_q, .975))
+
+write.csv(table_dat, "wtp_posteriors_table.csv", row.names=FALSE)
 
 
+group_vars <- c("hh_income", "age", "conservative_politics", "female")
+
+summary_list <- lapply(group_vars, function(var) {
+  tdat_long2 %>%
+    merge(test, by = "ID") %>%
+    group_by(.data[[var]]) %>%
+    summarise(mean_wtp = mean(wtp_q),
+              lower = quantile(wtp_q, .025),
+              upper = quantile(wtp_q, .975),
+              .groups = "drop") %>%
+    mutate(grouping_variable = var,
+           model = "BART") %>%
+    rename(group_value = !!sym(var))
+})
+
+
+summary_listlr <- lapply(group_vars, function(var) {
+  tdatlr_long2 %>%
+    merge(test, by = "ID") %>%
+    group_by(.data[[var]]) %>%
+    summarise(mean_wtp = mean(wtp_q),
+              lower = quantile(wtp_q, .025),
+              upper = quantile(wtp_q, .975),
+              .groups = "drop") %>%
+    mutate(grouping_variable = var,
+           model = "Bayesian Probit") %>%
+    rename(group_value = !!sym(var))
+})
+names(summary_list) <- group_vars
+names(summary_listlr) <- group_vars
+
+vars = c("hh_income", "age", "conservative_politics", "female")
+x <- vars[1]
+rbind(summary_list[[x]],summary_listlr[[x]]) %>% 
+ggplot( aes(x = factor(group_value), y = mean_wtp, fill = model)) +
+  geom_col(position = position_dodge(width = 0.9), width = 0.7) +
+  geom_errorbar(aes(ymin = lower, ymax = upper),
+                position = position_dodge(width = 0.9), width = 0.2) +
+  labs(x = "Income", y = "WTP", fill = "Model") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_grey() +
+  theme(text=element_text(size = 20)) 
+ggsave("income_plot.pdf")
+
+
+bart_summaries <- tdat_long2 %>% 
+  merge(test, by = "ID") %>% 
+  filter(age <80) %>% 
+  mutate(age_f = factor(age, levels = c(20,30,40,50,60,70),
+                        labels = c("18-24", "25-34", "35-44",
+                                   "45-54", "55-64", "65-74"))) %>% 
+  group_by(age_f, hh_income) %>% 
+  summarise(mean_wtp = mean(wtp_q),
+            lower = quantile(wtp_q, .025),
+            upper = quantile(wtp_q, .975),
+            .groups = "drop") 
+lr_summaries <- tdatlr_long2 %>% 
+  merge(test, by = "ID") %>% 
+  filter(age <80) %>% 
+  mutate(age_f = factor(age, levels = c(20,30,40,50,60,70),
+                        labels = c("18-24", "25-34", "35-44",
+                                   "45-54", "55-64", "65-74"))) %>% 
+  group_by(age_f, hh_income) %>% 
+  summarise(mean_wtp = mean(wtp_q),
+            lower = quantile(wtp_q, .025),
+            upper = quantile(wtp_q, .975),
+            .groups = "drop") 
+
+rbind(data.frame(bart_summaries, model = "BART"),
+      data.frame(lr_summaries, model = "Bayesian Probit"))%>% 
+  ggplot( aes(x = as.factor(hh_income), y = mean_wtp, fill = model)) +
+  geom_col(position = position_dodge(width = 0.9), width = 0.7) +
+  geom_errorbar(aes(ymin = lower, ymax = upper),
+                position = position_dodge(width = 0.9), width = 0.2) +
+  labs(x = "Income", y = "WTP", fill = "Model") +
+  facet_wrap(~age_f) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_grey() +
+  theme(text=element_text(size = 20))  
+ggsave("both_exploratory.pdf", width = 20, height = 15)
 #make demand curve
 
 dcurves <- bresults$wtp %>% 
@@ -163,14 +257,14 @@ dcurveslr2 <- dcurveslr%>%
 ggplot() +
   geom_line(aes(x = quant, y = wtp_q, group = variable), alpha = I(.1), data = dcurves) +
   #geom_line(aes(x = quant, y = wtp_q, group = variable), alpha = I(.15), data = dcurveslr, colour = "blue") +
-  geom_line(aes(x = quant, y= quant05),colour = "hotpink", data = dcurves2, linetype = 2, size = 1) +
-  geom_line(aes(x = quant, y= quant95),colour = "hotpink", data = dcurves2, linetype = 2, size = 1) +
-  geom_line(aes(x = quant, y= mean),colour = "hotpink", data = dcurves2, size = 1) +
-  geom_line(aes(x = quant, y= mean),colour = "green", data = dcurveslr2, size = 1)+
+  geom_line(aes(x = quant, y= quant05),colour = "red", data = dcurves2, linetype = 2, size = 1) +
+  geom_line(aes(x = quant, y= quant95),colour = "red", data = dcurves2, linetype = 2, size = 1) +
+  geom_line(aes(x = quant, y= mean),colour = "red", data = dcurves2, size = 1) +
+  #geom_line(aes(x = quant, y= mean),colour = "green", data = dcurveslr2, size = 1)+
   #geom_line(aes(x = quant, y= quant05),colour = "blue", data = dcurveslr2, linetype = 2) +
   #geom_line(aes(x = quant, y= quant95),colour = "blue", data = dcurveslr2, linetype = 2) +
-  labs(x = "P(WTP < A)", y = "WTP US $", caption = "BART = blue, probit = green") +
-  theme_bw()
+  labs(x = "P(WTP < A)", y = "WTP US $") +
+  theme_bw(base_size = 18)
 ggsave("wtp_envelope.pdf")
 
 ggplot() +
@@ -201,12 +295,13 @@ ggplot() +
   geom_line(aes(x = quant, y= mean), data = dcurves2, colour = "black") +
   geom_ribbon(aes(ymin = quant05, ymax = quant95, x= quant), alpha = .2, data = dcurves2, fill = "black") +
   labs(y = "WTP (US $)", x = "P(Y <= y)") + theme_bw() +
-  coord_flip() +
+  #coord_flip() +
   scale_colour_manual(name = "Group", values = c("Group 1" = "blue", "Group 2" = "black")) +
   scale_fill_manual(name = "Group", values = c("Group 1" = "blue", "Group 2" = "black")) +
   labs(y = "WTP (US $)", x = "P(Y <= y)") +
   theme_bw() +
-  coord_flip()
+  #coord_flip() +
+  labs(caption = "BART (black)\nProbit (blue)")
 
 ggsave("bird_wtp_envelope.pdf")
 

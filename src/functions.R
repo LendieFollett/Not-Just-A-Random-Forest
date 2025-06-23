@@ -295,14 +295,15 @@ results_combined %>%
   group_by(data, a, n, variable) %>% 
   summarise(value = mean(value)) %>% 
   ggplot() +
-  geom_line(aes(x = n, y = value, colour = factor(variable), group = factor(variable), linetype = factor(variable))) +
-  geom_point(aes(x = n, y = value, colour = factor(variable))) +
+  geom_line(aes(x = n, y = value, colour = factor(variable), group = factor(variable), linetype = factor(variable)), linewidth = 1.25) +
+  geom_point(aes(x = n, y = value, colour = factor(variable)), size = 2) +
     scale_linetype_manual("Model", values = c("solid", "solid", "solid", "dashed")) +
   facet_grid(a~data, scales = "free_y") +
   labs(x = "n", y = "RMSE") +
   scale_colour_grey("Model",start = 0, end = .8) +
+  #  scale_colour_brewer("Model", type = "qual", palette = "Dark2") +
   theme_bw()+
-    theme(text=element_text(size = 20)) +
+    theme(text=element_text(size = 25)) +
     scale_x_continuous(breaks = unique(results_combined$n))
 }
   
