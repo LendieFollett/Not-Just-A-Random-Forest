@@ -1,12 +1,12 @@
 
 
-all_combinedTRUE <- readRDS( paste0("all_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
-all_combinedFALSE <- readRDS( paste0("all_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
+all_combinedTRUE <- readRDS( paste0("output/all_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
+all_combinedFALSE <- readRDS( paste0("output/all_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
 all_combined <- rbind(all_combinedTRUE, all_combinedFALSE)
 
 
-results_combinedTRUE <- readRDS( paste0("results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
-results_combinedFALSE <- readRDS( paste0("results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
+results_combinedTRUE <- readRDS( paste0("output/results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
+results_combinedFALSE <- readRDS( paste0("output/results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
 results_combined <- rbind(results_combinedTRUE, results_combinedFALSE)
 
 

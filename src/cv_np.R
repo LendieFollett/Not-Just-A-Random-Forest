@@ -42,14 +42,20 @@ test_ends <- test2 %>% filter(CV_donate_bid %in% c(max(pts), min(pts)))
 test_notends <- test2 %>% filter(!CV_donate_bid %in% c(max(pts), min(pts)))
 
 p <- d %>% 
-  group_by(CV_donate_bid, hh_income) %>% 
+  group_by(CV_donate_bid) %>% 
   summarise(Pyes = mean(CV_donate_yes),
             n = n()) %>% 
+  rbind(data.frame(CV_donate_bid = 0, Pyes = 1, n = 0))
+
+interpol <- lm(Pyes ~ CV_donate_bid, data = p)
+upper <- -coef(interpol)[1]/coef(interpol)[2]
+#3404.015
+
+p%>% 
   ggplot() + 
-  geom_line(aes(x = CV_donate_bid, y = Pyes, colour = as.factor(hh_income))) +
-  scale_y_continuous(limits = c(0, .7)) +
-  facet_wrap(~hh_income)
-p
+  geom_line(aes(x = CV_donate_bid, y = Pyes)) +
+  scale_y_continuous(limits = c(0, .7)) 
+
 
 mb <- pbart(x.train = d[,-1],
              y.train = d[,1],
@@ -78,7 +84,7 @@ b <- as.matrix(d[,bcoefs_x]) %*%t(-bcoefs[bcoefs_x]/bcoefs[,"CV_donate_bid"])
 WTP_bprobit <- (b + matrix(a, nrow = nrow(b), ncol = ncol(b), byrow = TRUE)) %>%
   data.frame() %>% 
   mutate(ID = as.character(c(1:978))) %>% 
-  melt(measure.vars = paste0("X", 1:1000), value.name = "wtp_q") %>% 
+  melt(measure.vars = paste0("X", 1:5000), value.name = "wtp_q") %>% 
   mutate(wtp_q = pmax(wtp_q, 0) )
   
 

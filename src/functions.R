@@ -1,14 +1,13 @@
 
 
 get_wtp <- function(pred_matrix){
+
+  test_ends[paste0("Rep", 1:5000)] <- NA
   
-  print("first")
-  test_ends[paste0("Rep", 1:1000)] <- NA
-  
-  test_ends[paste0("Rep", 1:1000)] <- lapply(test_ends[paste0("Rep", 1:1000)], function(x) {
+  test_ends[paste0("Rep", 1:5000)] <- lapply(test_ends[paste0("Rep", 1:5000)], function(x) {
     ifelse(test_ends$CV_donate_bid == max(pts), 0, 1)
   })
-  print("one")
+
   
   pred_matrix2 <- data.frame(pred_matrix) 
   
@@ -17,18 +16,28 @@ get_wtp <- function(pred_matrix){
   testb <- test_notends %>% 
     data.frame(pred_matrix2)#(1-mb$prob.test) %>%  t() 
 
+
+  # Save original data
+  original_tdat <- testb %>%
+    rbind(test_ends) %>%
+    group_by(ID) %>%
+    arrange(CV_donate_bid, .by_group = TRUE)
   
-  tdat <-testb %>%
-    rbind(test_ends) %>% #tack on endpoints
-    group_by(ID) %>% 
-    arrange(CV_donate_bid, .by_group = TRUE) %>% 
-    # calculate differences in consecutive probabilities
-    # (some will be negative, that is taken care of below)
-     mutate(across(starts_with("Rep"), ~  pava(.x, decreasing=TRUE))) #%>% #Rep = P(said no)
-    #mutate(across(starts_with("Rep"), ~  lag(.)- ., .names = "diff_{col}")) %>% 
-    #arrange(ID, CV_donate_bid)
-  print("three")
-  #View(tdat[,c(1,5,1005)])
+  # monotonic adjustment
+  tdat <- original_tdat %>%
+    mutate(across(starts_with("Rep"), ~ pava(.x, decreasing = TRUE)))
+  
+  #diff <- data.frame(original_tdat[,c(1:6)],
+   #                   abs(original_tdat[,-c(1:6)] - tdat[,-c(1:6)])) %>% 
+  #group_by(ID) %>% 
+    #summarise(anydiff = any(Rep1 != 0),
+    #          countdiff = sum(Rep1 != 0)/2)
+  
+#table(diff$countdiff)/nrow(diff)
+
+  
+ #### END COUNTING
+  
   
   tdat <- tdat %>% select("ID", "CV_donate_bid",paste0("Rep", 1:1000))
   
