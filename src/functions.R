@@ -2,9 +2,9 @@
 
 get_wtp <- function(pred_matrix){
 
-  test_ends[paste0("Rep", 1:5000)] <- NA
+  test_ends[paste0("Rep", 1:4000)] <- NA
   
-  test_ends[paste0("Rep", 1:5000)] <- lapply(test_ends[paste0("Rep", 1:5000)], function(x) {
+  test_ends[paste0("Rep", 1:4000)] <- lapply(test_ends[paste0("Rep", 1:4000)], function(x) {
     ifelse(test_ends$CV_donate_bid == max(pts), 0, 1)
   })
 
@@ -39,7 +39,7 @@ get_wtp <- function(pred_matrix){
  #### END COUNTING
   
   
-  tdat <- tdat %>% select("ID", "CV_donate_bid",paste0("Rep", 1:1000))
+  tdat <- tdat %>% select("ID", "CV_donate_bid",paste0("Rep", 1:4000))
   
 
   tdat_long <- tdat %>%

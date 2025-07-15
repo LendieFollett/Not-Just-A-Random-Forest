@@ -83,34 +83,6 @@ dcurves %>%
             bart = ks.test(bart_uncali_q_quant, true_quant, alternative = "two.sided")$ p.value)
 
 
-dcurves %>% 
-  mutate(data = factor(data, levels = c("normal", "friedman", "step", "bin"),
-                       labels = c("Linear", "Friedman", "Step", "Binary"))
-  ) %>% 
-  filter(sigma == 15 & 
-           a == "symmetric" &
-           kind == "Not Sparse" & 
-           n ==1500 ) %>% 
-  ggplot() + 
-  geom_line(aes(x = bart_uncali_q,y = bart_uncali_q_quant, colour = "BART" )) +
-  geom_line(aes(x = probit,y = probit_quant, colour = "Probit" )) +
-  geom_line(aes(x = nn2_q,y = nn2_q_quant, colour = "NN" )) +
-  geom_line(aes(x = true,y = true_quant, colour = "True"),linewidth = 1) +
-  facet_grid(.~data, scales = "free") +
-  scale_color_manual(
-    name = "Model", 
-    breaks = c("True","BART", "NN", "RF", "Probit"),
-    values = c("True" = "red",
-               "BART" = "black",
-               "NN" = "grey40",
-               "RF" = "grey60",
-               "Probit" = "grey84")
-  ) +
-  scale_linewidth_manual("Model", values = c(1, rep(.5, 4)))+ 
-  theme_bw() +
-  labs(x = "WTP", y = "Quantile")
-
-ggsave(paste0("curves_", sparsity, ".pdf"), width = 20, height = 20)
 
 
 

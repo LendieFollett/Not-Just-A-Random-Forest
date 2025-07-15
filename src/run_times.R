@@ -14,6 +14,7 @@ library(BART)
 library(logistf)
 library(Iso)
 library(rstanarm)
+library(GGally)
 source("src/functions.R")
 
 numCores <- detectCores() - 1  # Use one less than the total number of cores
@@ -21,10 +22,10 @@ cl <- makeCluster(numCores)
 
 registerDoParallel(cl)
 
-a <- c(1,3) #1 = uniform, 3 = beta(3,1) (asymmetric)
+a <- c(1) #1 = uniform, 3 = beta(3,1) (asymmetric)
 sigma <- c(1,2)  # low high
 
-n <- c(1500,1000, 500, 250) + 500
+n <- c(1500, 250) + 500
 #reserve 500 for the test set
 
 comb <- expand.grid(a,sigma,n) %>% mutate(keep = paste0(Var1, Var2, Var3)) %>% pull(keep)
@@ -35,7 +36,7 @@ registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 ## ADD ERROR VARIABILITY ONTO THE WTP PREDICTIONS FOR THE WTP_MEANS (saved in all)
 
 results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
-  foreach(reps = 1:10) %dopar% {
+  foreach(reps = 1) %dopar% {
     #introduce sparsity into prediction matrix?
     sparsity = TRUE
     #covariates distribution
@@ -65,20 +66,24 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
     
     # Normal WTP_i = beta_N0 + beta_linear * X_i + error term (normally distributed)
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
-    WTP_normal <- beta_N0 + beta_linear * X[,1] + epsilon_Ni
+    mean_normal <- beta_N0 + beta_linear * X[,1]
+    WTP_normal <- mean_normal + epsilon_Ni
     
     #Friedman
-    WTP_friedman <-  beta_N0 +  2*(10*sin(pi*X[,1]*X[,2]) + 20*(X[,3] - 0.5)^2 + 10*X[,4] + 5*X[,5]) + rnorm(n, 0, sigma_2)
+    mean_friedman <- beta_N0 +  2*(10*sin(pi*X[,1]*X[,2]) + 20*(X[,3] - 0.5)^2 + 10*X[,4] + 5*X[,5])
+    WTP_friedman <-  mean_friedman + rnorm(n, 0, sigma_2)
     
     # Step function, normal error
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
-    WTP_step <- beta_N0 + beta_linear * (X[,1] < 0.5) + epsilon_Ni
+    mean_step <- beta_N0 + beta_linear * (X[,1] < 0.5) 
+    WTP_step <- mean_step+ epsilon_Ni
     
     # Binary x's only, normal error
     bin_beta <- c(5,10,-15,-25,10, -25, 25) %>% as.matrix()#c(5,10,-15,-25,10,25, 15) %>% as.matrix()#
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
     X2 <- apply(X[,1:5], 2, function(x){ifelse(x > 0.5, 1, 0)})
-    WTP_bin<- beta_N0 + as.matrix(data.frame(X2, X2[,1]*X2[,2], X2[,1]*X2[,3]))%*%(bin_beta) + epsilon_Ni    
+    mean_bin = beta_N0 + as.matrix(data.frame(X2, X2[,1]*X2[,2], X2[,1]*X2[,3]))%*%(bin_beta)
+    WTP_bin<- mean_bin + epsilon_Ni    
     
     # Create a data frame to store the results
     data <- data.frame(
@@ -96,6 +101,12 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
     survey <- data.frame(X = X,
                          A = A_samps,
                          apply(data, 2, function(x){ifelse(x > A_samps, 1, 0)}))
+    
+    #P(yes) = P(Y > A) = P(N(mu, \sigma^2) > A) = 1-pnorm(A, mean = mean_?, sd = sigma_1)
+    true_probs <- data.frame(WTP_friedman=1-pnorm(A_samps, mean = mean_friedman, sd = sigma_2),
+                             WTP_step = 1-pnorm(A_samps, mean = mean_step, sd = sigma_1),
+                             WTP_normal = 1-pnorm(A_samps, mean = mean_normal, sd = sigma_1),
+                             WTP_bin = 1-pnorm(A_samps, mean = mean_bin, sd = sigma_1))
     
     train.idx <- sample(1:nrow(survey), 
                         size = nrow(survey) - 500, #remaining 500 for the test set
@@ -121,6 +132,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
     test_notends <- test2 %>% filter(!A %in% c(max(pts), min(pts)))
     
 
+    all <- list()
     results <- list()
     j = 0
     for (c in c("WTP_normal", "WTP_friedman", "WTP_step", "WTP_bin")){    
@@ -201,7 +213,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       bart1 <- Sys.time()
       b <- pbart(x.train = train[, xa_list],
                  y.train = train[, c],
-                 x.test = test_notends[, xa_list],
+                 x.test = test[, xa_list],
                  ntree = 100,#cv$num_trees,
                  k = 2,#cv$k,
                  ndpost = ndpost, 
@@ -209,6 +221,8 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       
       bart2 <- Sys.time()
       bart_time <- (bart2 - bart1)
+      bart_probs <- b$prob.test  %>% colMeans
+      
       ################################################################
       #FIT RF
       ################################################################
@@ -219,6 +233,8 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                          type = "class") 
       rf2 <- Sys.time()
       rf_time <- (rf2 - rf1)
+      
+      rf_probs <- predict(rf, bprobit_test, type = "prob")[,"1"]
 
       ################################################################ 
       #FIT TRADITIONAL PROBIT 
@@ -227,6 +243,8 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       probit <- glm(f, data = bprobit_train, family = binomial(link = "probit"))
       probit2 <- Sys.time()
       probit_time <- (probit2 - probit1) 
+      
+      probit_probs <- predict(probit, bprobit_test, type = "response")
       ################################################################  
       #FIT BAYESIAN PROBIT 
       ################################################################ 
@@ -236,11 +254,12 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                           family = binomial(link = "probit"), 
                           prior = normal(0, 1), 
                           prior_intercept = normal(0, 1), 
-                          chains = 1, iter = 1000,
+                          chains = 1, iter = 2000,
                           init = "0")
       bprobit2 <- Sys.time()
-      bprobit_time <- (bprobit2 - bprobit1) 
-      
+      bprobit_time <- bprobit2 - bprobit1
+      bprobit_probs <- posterior_epred(bprobit, newdata = bprobit_test) %>% colMeans
+ 
       ################################################################
       #FIT NEURAL NETWORK
       ################################################################ 
@@ -257,39 +276,89 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                           trControl = trainControl(method = "cv", number = 5),
                           trace = FALSE)
       nn2 <- Sys.time()
-      nn_time <- (nn2 - nn1) 
+      nn_time <- nn2-nn1
+      nn_probs <- predict(nnet_model, n_test, type = "prob")[,"1"]
 
       ################################################################
       
-
-      #one row per rep
+#save times
       results[[j]] <- data.frame(n = n - 500,
+                                 a = ifelse(a == 1, "symmetric", "asymmetric"),
+                                 sigma = sigma_1,
+                                 sparsity = sparsity,
+                             data = gsub("WTP_", "", c),
+                             bart = bart_time,
+                             rf = rf_time,
+                             nn = nn_time,
+                             probit = probit_time,
+                             bprobit = bprobit_time )
+
+      #500 rows per rep
+      
+      all[[j]] <- rbind(data.frame(n = n - 500,
+                                   a = ifelse(a == 1, "symmetric", "asymmetric"),
+                                   sigma = sigma_1,
+                                   sparsity = sparsity,
                                  data = gsub("WTP_", "", c),
-                                 bart = bart_time,
-                                 rf = rf_time,
-                                 nn = nn_time,
-                                 probit = probit_time,
-                                 bprobit = bprobit_time
-                                 
-                                 
-      )
+                                 true = true_probs[-train.idx,c],
+                                 bart = bart_probs,
+                                 rf = rf_probs,
+                                 nn = nn_probs,
+                                 probit = probit_probs,
+                                 bprobit = bprobit_probs)
+                        )
       
     }
+    all <- do.call(rbind, all)
     results <- do.call(rbind, results)
     
-    list( results = results)
+    list( results = results,all = all)
   }
 
 
 
 results_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$results))))
+all_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, lapply(x, function(y) y$all))))
 
+#Illustration of stage 1 model performances - comparison of predicted probabilities vs true probabilities
 
-sparsity = FALSE
+library(scales)
 
-saveRDS(all_combined, paste0("all_combined_",sparsity,".RDS"))
-saveRDS(results_combined, paste0("results_combined_",sparsity,".RDS"))
+#friedman
+all_combined %>% 
+  filter(n == 1500 & sigma == 15 & data == "friedman") %>% 
+  select(true, bart, rf, nn, probit, bprobit) %>% 
+ggpairs(lower = list(continuous = wrap("points", alpha = 0.2))) + 
+  theme_bw() + 
+  theme(text = element_text(size = 20)) +
+  scale_x_continuous(breaks = c(0, .5, 1))
+ggsave("corr_friedman.pdf", width = 10, height = 10)
 
-#results_combinedTRUE <- readRDS( paste0("results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
-#results_combinedFALSE <- readRDS( paste0("results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
+#normal
+all_combined %>% 
+  filter(n == 1500 & sigma == 15 & data == "normal") %>% 
+  select(true, bart, rf, nn, probit, bprobit) %>% 
+  ggpairs(lower = list(continuous = wrap("points", alpha = 0.2))) + 
+  theme_bw() + 
+  theme(text = element_text(size = 20))+
+  scale_x_continuous(breaks = c(0, .5, 1))
+ggsave("corr_normal.pdf")
 
+#step
+all_combined %>% 
+  filter(n == 1500 & sigma == 15 & data == "step") %>% 
+  select(true, bart, rf, nn, probit, bprobit) %>% 
+  ggpairs(lower = list(continuous = wrap("points", alpha = 0.2))) + 
+  theme_bw() + 
+  theme(text = element_text(size = 20))+
+  scale_x_continuous(breaks = c(0, .5, 1))
+ggsave("corr_step.pdf")
+#bin
+all_combined %>% 
+  filter(n == 1500 & sigma == 15 & data == "bin") %>% 
+  select(true, bart, rf, nn, probit, bprobit) %>% 
+  ggpairs(lower = list(continuous = wrap("points", alpha = 0.2))) + 
+  theme_bw() + 
+  theme(text = element_text(size = 20))+
+  scale_x_continuous(breaks = c(0, .5, 1))
+ggsave("corr_bin.pdf")
