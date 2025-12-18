@@ -14,6 +14,7 @@ library(BART)
 library(logistf)
 library(Iso)
 library(rstanarm)
+#install.packages("ggplot2", dependencies = TRUE)
 source("src/functions.R")
 
 numCores <- detectCores() - 1  # Use one less than the total number of cores
@@ -35,6 +36,7 @@ registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 ## ADD ERROR VARIABILITY ONTO THE WTP PREDICTIONS FOR THE WTP_MEANS (saved in all)
 
 results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
+
   foreach(reps = 1:100) %dopar% {
     #introduce sparsity into prediction matrix?
     sparsity = FALSE
@@ -65,20 +67,24 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
     
     # Normal WTP_i = beta_N0 + beta_linear * X_i + error term (normally distributed)
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
-    WTP_normal <- beta_N0 + beta_linear * X[,1] + epsilon_Ni
-    
+    mean_normal <- beta_N0 + beta_linear * X[,1]
+    WTP_normal <- mean_normal + epsilon_Ni
     #Friedman
-    WTP_friedman <-  beta_N0 +  2*(10*sin(pi*X[,1]*X[,2]) + 20*(X[,3] - 0.5)^2 + 10*X[,4] + 5*X[,5]) + rnorm(n, 0, sigma_2)
-    
+    mean_friedman <- beta_N0 +  2*(10*sin(pi*X[,1]*X[,2]) + 20*(X[,3] - 0.5)^2 + 10*X[,4] + 5*X[,5])
+    WTP_friedman <-  mean_friedman + rnorm(n, 0, sigma_2)
     # Step function, normal error
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
-    WTP_step <- beta_N0 + beta_linear * (X[,1] < 0.5) + epsilon_Ni
+    mean_step <- beta_N0 + beta_linear * (X[,1] < 0.5) 
+    WTP_step <- mean_step+ epsilon_Ni
+    
     
     # Binary x's only, normal error
     bin_beta <- c(5,10,-15,-25,10, -25, 25) %>% as.matrix()#c(5,10,-15,-25,10,25, 15) %>% as.matrix()#
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
     X2 <- apply(X[,1:5], 2, function(x){ifelse(x > 0.5, 1, 0)})
-    WTP_bin<- beta_N0 + as.matrix(data.frame(X2, X2[,1]*X2[,2], X2[,1]*X2[,3]))%*%(bin_beta) + epsilon_Ni    
+    mean_bin = beta_N0 + as.matrix(data.frame(X2, X2[,1]*X2[,2], X2[,1]*X2[,3]))%*%(bin_beta)
+    WTP_bin<- mean_bin + epsilon_Ni    
+    
     
     # Create a data frame to store the results
     data <- data.frame(
@@ -96,7 +102,10 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
     survey <- data.frame(X = X,
                          A = A_samps,
                          apply(data, 2, function(x){ifelse(x > A_samps, 1, 0)}))
-    
+    true_probs <- data.frame(WTP_friedman=1-pnorm(A_samps, mean = mean_friedman, sd = sigma_2),
+                             WTP_step = 1-pnorm(A_samps, mean = mean_step, sd = sigma_1),
+                             WTP_normal = 1-pnorm(A_samps, mean = mean_normal, sd = sigma_1),
+                             WTP_bin = 1-pnorm(A_samps, mean = mean_bin, sd = sigma_1))
     train.idx <- sample(1:nrow(survey), 
                         size = nrow(survey) - 500, #remaining 500 for the test set
                         replace=FALSE)
@@ -120,8 +129,11 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
     test_ends <- test2 %>% filter(A %in% c(max(pts), min(pts)))
     test_notends <- test2 %>% filter(!A %in% c(max(pts), min(pts)))
     
+    cases <-which(paste(test_notends$ID, test_notends$A) %in% paste(test$ID, test$A))
+    
     all <- list()
     results <- list()
+    probs <- list()
     j = 0
     for (c in c("WTP_normal", "WTP_friedman", "WTP_step", "WTP_bin")){    
       j = j + 1
@@ -194,42 +206,90 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       n_test_ends$A <- (n_test_ends$A - mean(A))/sd(A)
       n_test_notends$A <- (n_test_notends$A - mean(A))/sd(A)
       
+
       ################################################################
-      #FIT BART
+      # FIT BARTs: (1) untuned baseline, (2) tuned BART via simple CV
       ################################################################
-      ndpost = 2000
-      b <- pbart(x.train = train[, xa_list],
-                 y.train = train[, c],
-                 x.test = test_notends[, xa_list],
-                 ntree = 100,#cv$num_trees,
-                 k = 2,#cv$k,
-                 ndpost = ndpost, 
-                 nskip = 2000)
+      ndpost <- 2000
       
-      # 1. Fit logistic regression on the BART (uncalibrated) probabilities
-     # b_probs1 <- b$prob.train.mean
-      #calibration_model <- logistf(bprobit_train[,c] ~ b_probs1, family = binomial(link = "logit"),
-          #                         plcontrol = logistpl.control(maxit=1000))
+      bart_grid <- expand.grid(
+        ntree = c(50, 100, 200),
+        k     = c(1, 2, 3)
+      )
       
-      #make empty matrix
-      #b_probs_cali <- matrix(ncol = nrow(bprobit_test_notends), nrow = ndpost)
-      #fill row by row
-      #for (i in 1:ndpost){
-       # print(i)
-        #3. Calibrate probabilities
-      #  b_probs_cali[i,] <- predict(calibration_model, data.frame(b_probs1=b$prob.test[i,]),type = "response")
-      #}
+      ## untuned BART (what you already had) ----------
+      b <- pbart(
+        x.train = as.matrix(train[, xa_list]),
+        y.train = train[, c],
+        x.test  = as.matrix(test_notends[, xa_list]),
+        ntree   = 100, #untuned
+        k       = 2,
+        ndpost  = ndpost,
+        nskip   = 2000
+      )
       
+      bart_probs <- b$prob.test %>% colMeans
       
-      #BART
-      #tdat_long2 <- get_wtp2(pred_matrix = b_probs_cali %>% t(),#,b$prob.test %>% t(),#dim = 1000 x 1800
-      #                       test_ends = test_ends,
-      #                       test_notends=test_notends,
-      #                       ndpost = ndpost)
-      tdat_long2_uncali <- get_wtp2(pred_matrix = b$prob.test %>% t(),#dim = 1000 x 1800
-                             test_ends = test_ends,
-                             test_notends=test_notends,
-                             ndpost = ndpost)
+      tdat_long2_uncali <- get_wtp2(
+        pred_matrix = b$prob.test %>% t(),    # dim: ndpost x n_test_notends
+        test_ends   = test_ends,
+        test_notends = test_notends,
+        ndpost      = ndpost
+      )
+      
+      ##  Tuned BART via internal train/validation split --------
+      set.seed(10 + r + j)   # keep tuning reproducible but vary by rep/outcome
+      
+      # 80/20 split of 'train' for BART tuning
+      bart_tune_idx   <- sample(seq_len(nrow(train)), size = floor(0.8 * nrow(train)))
+      bart_x_train_cv <- as.matrix(train[bart_tune_idx, xa_list])
+      bart_y_train_cv <- train[bart_tune_idx, c]
+      bart_x_valid_cv <- as.matrix(train[-bart_tune_idx, xa_list])
+      bart_y_valid_cv <- train[-bart_tune_idx, c]
+      
+      # Grid search over (ntree, k) using Brier score on validation set
+      bart_tune_scores <- apply(bart_grid, 1, function(pars) {
+        ntree_i <- pars[["ntree"]]
+        k_i     <- pars[["k"]]
+        
+        fit_cv <- pbart(
+          x.train = bart_x_train_cv,
+          y.train = bart_y_train_cv,
+          x.test  = bart_x_valid_cv,
+          ntree   = ntree_i,
+          k       = k_i,
+          ndpost  = 1000,
+          nskip   = 1000
+        )
+        
+        p_valid <- colMeans(fit_cv$prob.test)
+        mean((p_valid - bart_y_valid_cv)^2)   # Brier score
+      })
+      
+      best_idx        <- which.min(bart_tune_scores)
+      best_ntree      <- bart_grid$ntree[best_idx]
+      best_k          <- bart_grid$k[best_idx]
+      
+      # Final tuned BART: refit on full train, predict on test_notends
+      b_tuned <- pbart(
+        x.train = as.matrix(train[, xa_list]),
+        y.train = train[, c],
+        x.test  = as.matrix(test_notends[, xa_list]),
+        ntree   = best_ntree,
+        k       = best_k,
+        ndpost  = ndpost,
+        nskip   = 2000
+      )
+      
+      bart_tuned_probs <- b_tuned$prob.test %>% colMeans
+      
+      tdat_long2_tuned <- get_wtp2(
+        pred_matrix = b_tuned$prob.test %>% t(),
+        test_ends   = test_ends,
+        test_notends = test_notends,
+        ndpost      = ndpost
+      )
+      
       ################################################################
       #FIT RF
       ################################################################
@@ -252,14 +312,14 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       tdatrf_long2 <- get_wtp_point(pred_vector = rf_probs_cali, test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
       
       tdatrf_uncali_long2 <- get_wtp_point(pred_vector = rf_probs_uncali, test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
-      
+      rf_probs <- predict(rf, bprobit_test, type = "prob")[,"1"]
       ################################################################ 
       #FIT TRADITIONAL PROBIT 
       ################################################################ 
       probit <- glm(f, data = bprobit_train, family = binomial(link = "probit"))
       coefs <- coef(probit)
       WTP_logit <- -coefs["(Intercept)"] / coefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-coefs[x_list] / coefs["A"])
-      
+      probit_probs <- predict(probit, bprobit_test, type = "response")
       ################################################################  
       #FIT BAYESIAN PROBIT 
       ################################################################ 
@@ -270,7 +330,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                           prior_intercept = normal(0, 1), 
                           chains = 1, iter = 1000,
                           init = "0")
-      
+      bprobit_probs <- posterior_epred(bprobit, newdata = bprobit_test) %>% colMeans
       bcoefs <- as.data.frame(bprobit) %>% apply(2, mean)
       WTP_bprobit <- -bcoefs["(Intercept)"] / bcoefs["A"] + as.matrix(bprobit_test[, x_list])%*%as.matrix(-bcoefs[x_list] / bcoefs["A"]) 
       
@@ -278,11 +338,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       WTP_bprobit2 <- get_wtp_point(pred_vector = predict(bprobit, newdata=bprobit_test_notends[colnames(bprobit_train)[1:11]], type="response"),
                                     test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
       
-      #get_wtp_point gives effectively the same solution as the standard probit formula
-      #what about get_wtp(pred_matrix = posterior_epred(bprobit,  test_notends[,-1] ) %>% t())
-     #WTP_bprobit3 <- get_wtp2(pred_matrix= posterior_epred(bprobit,  test_notends[,-1] ) %>% t(), 
-      #         test_ends,test_notends, ndpost=500)
-      #get_wtp2 and get_wtp_point result in identical numbers
+
       ################################################################
       #FIT NEURAL NETWORK
       ################################################################ 
@@ -298,6 +354,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                           trControl = trainControl(method = "cv", number = 5),
                           trace = FALSE)
       
+      nn_probs <- predict(nnet_model, n_test, type = "prob")[,"1"]
       #ANN
       tdatn2_long2 <- get_wtp_point(pred_vector = predict(nnet_model, n_test_notends, type = "prob")[,"1"], test_ends = bprobit_test_ends,test_notends=bprobit_test_notends)
       
@@ -313,6 +370,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                               true = test.wtp[, c],
                               #bart_q = tdat_long2$wtp_q,
                               bart_uncali_q = tdat_long2_uncali$wtp_q,
+                              bart_tuned_q = tdat_long2_tuned$wtp_q,
                               nn2_q = tdatn2_long2$wtp_q,
                               rf = tdatrf_long2$wtp_q,
                               rf_uncali = tdatrf_uncali_long2$wtp_q,
@@ -330,6 +388,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                                  #average individual mse
                                  #bart_mse = mean((tdat_long2$wtp_q - test.wtp[, c])^2)^0.5,
                                  bart_uncali_mse = mean((tdat_long2_uncali$wtp_q - test.wtp[, c])^2)^0.5,
+                                 bart_tuned_mse = mean((tdat_long2_tuned$wtp_q - test.wtp[, c])^2)^0.5,
                                  nn2_mse = mean((tdatn2_long2$wtp_q - test.wtp[, c])^2)^0.5,
                                  rf_mse = mean((tdatrf_long2$wtp_q - test.wtp[, c])^2)^0.5,
                                  rf_uncali_mse = mean((tdatrf_uncali_long2$wtp_q - test.wtp[, c])^2)^0.5,
@@ -339,6 +398,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                                  #median of the test sample predicted WTP minus median true WTP
                                  #bart_bias = median(tdat_long2$wtp_q) - median(test.wtp[, c]),
                                  bart_uncali_bias = median(tdat_long2_uncali$wtp_q) - median(test.wtp[, c]),
+                                 bart_tuned_bias = median(tdat_long2_tuned$wtp_q) - median(test.wtp[, c]),
                                  nn2_bias = median(tdatn2_long2$wtp_q) - median(test.wtp[, c]),
                                  rf_bias = median(tdatrf_long2$wtp_q) - median(test.wtp[, c]),
                                  rf_uncali_bias = median(tdatrf_uncali_long2$wtp_q) - median(test.wtp[, c]),
@@ -346,6 +406,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                                  bprobit_bias = median(WTP_bprobit) - median(test.wtp[, c]),
                                  
                                  bart_uncali_bias_mn = mean(tdat_long2_uncali$wtp_q) - mean(test.wtp[, c]),
+                                 bart_tuned_bias_mn = mean(tdat_long2_tuned$wtp_q) - mean(test.wtp[, c]),
                                  nn2_bias_mn = mean(tdatn2_long2$wtp_q) - mean(test.wtp[, c]),
                                  rf_bias_mn = mean(tdatrf_long2$wtp_q) - mean(test.wtp[, c]),
                                  rf_uncali_bias_mn = mean(tdatrf_uncali_long2$wtp_q) - mean(test.wtp[, c]),
@@ -354,18 +415,44 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                                  
                                  mean_true = mean(test.wtp[,c]),
                                  mean_bart = mean(tdat_long2_uncali$wtp_q),
+                                 mean_bart_tuned = mean(tdat_long2_tuned$wtp_q),
                                  mean_nn = mean(tdatn2_long2$wtp_q),
                                  mean_rf = mean(tdatrf_long2$wtp_q),
                                  mean_rf_uncali = mean(tdatrf_uncali_long2$wtp_q),
                                  mean_probit = mean(WTP_logit),
-                                 mean_bprobit = mean(WTP_bprobit)
+                                 mean_bprobit = mean(WTP_bprobit),
+                                 
+                                 probcor_bart = cor(bart_probs[cases],true_probs[-train.idx,c]),
+                                 probcor_bart_tuned = cor(bart_tuned_probs[cases],true_probs[-train.idx,c]),
+                                 probcor_rf = cor(rf_probs,true_probs[-train.idx,c]),
+                                 probcor_nn = cor(nn_probs,true_probs[-train.idx,c]),
+                                 probcor_probit = cor(probit_probs, true_probs[-train.idx,c]),
+                                 probcor_bprobit = cor(bprobit_probs,true_probs[-train.idx,c]),
+                                 
+                                 bart_uncali_prob_mse = mean((bart_probs[cases] - true_probs[-train.idx,c])^2)^0.5,
+                                 bart_tuned_prob_mse = mean((bart_tuned_probs[cases] - true_probs[-train.idx,c])^2)^0.5,
+                                 nn2_prob_mse = mean((nn_probs - true_probs[-train.idx,c])^2)^0.5,
+                                 rf_uncali_prob_mse = mean((rf_probs - true_probs[-train.idx,c])^2)^0.5,
+                                 probit_prob_mse = mean((probit_probs - true_probs[-train.idx,c])^2)^0.5,
+                                 bprobit_prob_mse = mean((bprobit_probs - true_probs[-train.idx,c])^2)^0.5
                                  )
-      
+
+      probs[[j]]  <- data.frame(true = true_probs[-train.idx,c],
+                                 bart = bart_probs,
+                                bart_tuned = bart_tuned_probs,
+                                 rf = rf_probs,
+                                 nn = nn_probs,
+                                 probit = probit_probs,
+                                 bprobit = bprobit_probs)
+        
+        
+
     }
     all <- do.call(rbind, all)
     results <- do.call(rbind, results)
+    probs <- do.call(rbind, probs)
     
-    list( results = results,all = all)
+    list( results = results,all = all, probs = probs)
   }
 
 
@@ -376,8 +463,8 @@ results_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, la
 
 sparsity = FALSE
 
-saveRDS(all_combined, paste0("all_combined_",sparsity,".RDS"))
-saveRDS(results_combined, paste0("results_combined_",sparsity,".RDS"))
+saveRDS(all_combined, paste0("output/all_combined_",sparsity,".RDS"))
+saveRDS(results_combined, paste0("output/results_combined_",sparsity,".RDS"))
 
 #results_combinedTRUE <- readRDS( paste0("results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
 #results_combinedFALSE <- readRDS( paste0("results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")

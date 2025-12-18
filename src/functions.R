@@ -198,74 +198,6 @@ make_bins <- function(df){
 }
 
 
-
-rmse_ratio_plot <- function(results_combined, k, sig){
-results_combined %>%
-    filter(sigma == sig & kind == k) %>% 
-  group_by(data,n,a) %>%
-  summarise(
-    #bart_cali = mean(bart_mse) / mean(probit_mse),
-    bart_uncali = mean(bart_uncali_mse) / mean(probit_mse),
-    nn2_q = mean(nn2_mse) / mean(probit_mse),
-    #rf_cali = mean(rf_mse) / mean(probit_mse),
-    rf_uncali = mean(rf_uncali_mse) / mean(probit_mse),
-    bprobit = mean(bprobit_mse) / mean(probit_mse)
-  ) %>% 
-  ungroup() %>%
-  ggplot() +
-  geom_line(aes(x = n, y = nn2_q, colour = "NN")) +
-  geom_point(aes(x = n, y = nn2_q, colour = "NN")) +
-  
-  #geom_line(aes(x = sigma, y = bprobit, colour = "B. Probit")) +
-  #geom_point(aes(x = sigma, y = bprobit, colour = "B. Probit")) +
-  
-  geom_line(aes(x = n, y = rf_uncali, colour = "RF")) +
-  geom_point(aes(x = n, y = rf_uncali, colour = "RF")) +
-  
-  geom_line(aes(x = n, y = bart_uncali, colour = "BART")) +  
-  geom_point(aes(x = n, y = bart_uncali, colour = "BART")) +
-  
-  geom_hline(aes(yintercept = 1, colour = "Probit"), linetype = 2) +
-  
-  facet_grid(a~data) +
-  scale_color_manual(
-    name = "Model", # Legend title
-    #values = c("BART" = "grey10", "NN" = "grey50", "RF" = "grey80", "Probit" = "grey"),
-    breaks = c("BART", "NN", "RF", "Probit"),
-    values = c("BART" = "black",
-               "NN" = "grey40",
-               "RF" = "grey60",
-               "Probit" = "grey85")
-  ) +
-  theme_bw() +
-  labs(x = expression(n), y = "RMSE Ratio\n(relative to Probit)") +
-  theme(text=element_text(size = 20)) +
-    scale_x_continuous(breaks = unique(results_combined$n))
-}
-
-bias_plot <- function(results_combined,k, sig){
-  results_combined %>%
-    filter(sigma == sig& kind == k) %>% 
-    melt(id.vars = c("data", "rep",  "n", "a", "kind", "sigma")) %>% 
-    filter(grepl("bias", variable) & !grepl("bprobit", variable)& grepl("mn", variable)) %>% 
-    mutate(variable = factor(variable, 
-                             levels = c("bart_uncali_bias_mn", "nn2_bias_mn", "rf_uncali_bias_mn", "probit_bias_mn"),
-                             labels = c("BART", "NN", "RF", "Probit"))) %>% 
-    group_by(data, a, n, variable) %>% 
-    summarise(value = mean(value)) %>% 
-    ggplot() +
-    geom_line(aes(x = n, y = abs(value), colour = factor(variable), linetype = factor(variable), group = factor(variable))) +
-    geom_point(aes(x = n, y = abs(value), colour = factor(variable))) +
-    geom_hline(aes(yintercept = 0)) +
-    facet_grid(a~data, scales = "free_y") +
-    labs(x = "n", y = "Bias (median)", colour = "Model", linetype = "Model") +
-    scale_colour_grey("Model", start = 0, end = .8) +
-    scale_linetype_manual("Model", values = c("solid", "solid", "solid", "dashed")) +
-    theme_bw()+
-    theme(text=element_text(size = 20)) +
-    scale_x_continuous(breaks = unique(results_combined$n))
-}
-
 mae_plot <- function(results_combined,k, sig){
   results_combined %>%
     #filter(data != "Step") %>% 
@@ -283,8 +215,8 @@ mae_plot <- function(results_combined,k, sig){
     #geom_hline(aes(yintercept = 0)) +
     facet_grid(a~data, scales = "free_y") +
     labs(x = "n", y = "MAE (median)", colour = "Model", linetype = "Model") +
-    scale_colour_grey("Model", start = 0, end = .8) +
-    scale_linetype_manual("Model", values = c("solid", "solid", "solid", "dashed")) +
+    scale_linetype_manual("Model", values = c("solid", "solid","dotted", "dashed","solid", "solid")) +
+    scale_colour_manual("Model", values = paste0("grey", c(10, 30, 40, 50, 70, 90))) +
     theme_bw()+
     theme(text=element_text(size = 20)) +
     scale_x_continuous(breaks = unique(results_combined$n)) #+
@@ -297,70 +229,86 @@ results_combined %>%
     #filter(data != "Step") %>% 
     filter(sigma == sig & kind == k) %>% 
   melt(id.vars = c("data", "rep", "n", "a", "kind", "sigma")) %>% 
-  filter(grepl("mse", variable) & ! grepl("bprobit", variable)) %>% 
+  filter(grepl("mse", variable) ) %>% 
   mutate(variable = factor(variable, 
-                           levels = c("bart_uncali_mse", "nn2_mse", "rf_uncali_mse", "probit_mse"),
-                           labels = c("BART", "NN", "RF", "Probit"))) %>% 
+                           levels = c("bart_uncali_mse","bart_tuned_mse", "nn2_mse", "rf_uncali_mse", "probit_mse", "bprobit_mse"),
+                           labels = c("BART", "BART Tuned", "NN", "RF", "Probit", "Bayesian Probit"))) %>% 
   group_by(data, a, n, variable) %>% 
   summarise(value = mean(value)) %>% 
   ggplot() +
   geom_line(aes(x = n, y = value, colour = factor(variable), group = factor(variable), linetype = factor(variable)), linewidth = 1.25) +
   geom_point(aes(x = n, y = value, colour = factor(variable)), size = 2) +
-    scale_linetype_manual("Model", values = c("solid", "solid", "solid", "dashed")) +
+    scale_linetype_manual("Model", values = c("solid", "solid","dotted", "dashed","solid", "dashed")) +
+    scale_colour_manual("Model", values = paste0("grey", c(10, 30, 40, 50, 70, 90))) +
   facet_grid(a~data, scales = "free_y") +
   labs(x = "n", y = "RMSE") +
-  scale_colour_grey("Model",start = 0, end = .8) +
   #  scale_colour_brewer("Model", type = "qual", palette = "Dark2") +
   theme_bw()+
-    theme(text=element_text(size = 25)) +
+    theme(text=element_text(size = 25),legend.key.width = unit(2, "cm") ) +
     scale_x_continuous(breaks = unique(results_combined$n))
 }
   
   
-  
-  
-  mae_ratio_plot <- function(results_combined, k, sig){
-    results_combined %>%
-      filter(sigma == sig & kind == k) %>% 
-      group_by(data,n,a) %>%
-      summarise(
-        #bart_cali = mean(bart_mse) / mean(probit_mse),
-        bart_uncali = mean(abs(bart_uncali_bias_mn)) / mean(abs(probit_bias_mn)),
-        nn2_q = mean(abs(nn2_bias_mn)) / mean(abs(probit_bias_mn)),
-        #rf_cali = mean(rf_mse) / mean(probit_mse),
-        rf_uncali = mean(abs(rf_uncali_bias_mn)) / mean(abs(probit_bias_mn)),
-        bprobit = mean(abs(bprobit_bias_mn)) / mean(abs(probit_bias_mn))
-      ) %>% 
-      ungroup() %>%
-      ggplot() +
-      geom_line(aes(x = n, y = nn2_q, colour = "NN")) +
-      geom_point(aes(x = n, y = nn2_q, colour = "NN")) +
-      
-      #geom_line(aes(x = sigma, y = bprobit, colour = "B. Probit")) +
-      #geom_point(aes(x = sigma, y = bprobit, colour = "B. Probit")) +
-      
-      geom_line(aes(x = n, y = rf_uncali, colour = "RF")) +
-      geom_point(aes(x = n, y = rf_uncali, colour = "RF")) +
-      
-      geom_line(aes(x = n, y = bart_uncali, colour = "BART")) +  
-      geom_point(aes(x = n, y = bart_uncali, colour = "BART")) +
-      
-      geom_hline(aes(yintercept = 1, colour = "Probit"), linetype = 2) +
-      
-      facet_grid(a~data) +
-      scale_color_manual(
-        name = "Model", # Legend title
-        #values = c("BART" = "grey10", "NN" = "grey50", "RF" = "grey80", "Probit" = "grey"),
-        breaks = c("BART", "NN", "RF", "Probit"),
-        values = c("BART" = "black",
-                   "NN" = "grey40",
-                   "RF" = "grey60",
-                   "Probit" = "grey85")
-      ) +
-      theme_bw() +
-      labs(x = expression(n), y = "MAE Ratio\n(relative to Probit)") +
-      theme(text=element_text(size = 20)) +
-      scale_x_continuous(breaks = unique(results_combined$n))
-  }
-  
+cor_plot <- function(results_combined, k, sig){
+  results_combined %>%
+    #filter(data != "Step") %>% 
+    filter(sigma == sig & kind == k) %>% 
+    melt(id.vars = c("data", "rep", "n", "a", "kind", "sigma")) %>% 
+    filter(grepl("probcor", variable) ) %>% 
+    mutate(variable = factor(variable, 
+                             levels = c("probcor_bart", "probcor_bart_tuned", "probcor_nn", "probcor_rf", "probcor_bprobit","probcor_probit"),
+                             labels = c("BART","BART Tuned", "NN", "RF", "B. Probit", "Probit"))) %>% 
+    group_by(data, a, n, variable) %>% 
+    summarise(value = mean(value)) %>% 
+    ggplot() +
+    geom_line(aes(x = n, y = value, colour = factor(variable), group = factor(variable), linetype = factor(variable)), linewidth = 1.25) +
+    geom_point(aes(x = n, y = value, colour = factor(variable)), size = 2) +
+    scale_linetype_manual("Model", values = c("solid", "solid","dotted", "dashed","solid", "solid")) +
+    scale_colour_manual("Model", values = paste0("grey", c(10, 30, 40, 50, 70, 90))) +
+    facet_grid(a~data, scales = "free_y") +
+    labs(x = "n", y = "Correlation") +
+    #scale_colour_grey("Model",start = 0, end = .8) +
+    #  scale_colour_brewer("Model", type = "qual", palette = "Dark2") +
+    theme_bw()+
+    theme(text=element_text(size = 25),legend.key.width = unit(2, "cm") ) +
+    scale_x_continuous(breaks = unique(results_combined$n))
+}
 
+
+bias_plot <- function(results_combined, k, sig){
+results_combined %>%
+  filter(sigma == sig & kind == k) %>% 
+  select("n" ,"data" ,"sigma", "a" ,"kind","rep","mean_true","mean_bart" ,"mean_probit", "mean_bprobit" ,"mean_bart_tuned" , "mean_nn","mean_rf" ) %>% 
+  pivot_longer(
+    cols = starts_with("mean_") & !matches("mean_true"),
+    names_to = "model",
+    values_to = "mean_hat"
+  ) %>%
+  mutate(
+    model = sub("^mean_", "", model),
+    abs_bias = abs(mean_hat - mean_true)/mean_true
+  ) %>%
+  mutate(variable = factor(model, 
+                           levels = c("bart", "bart_tuned", "nn", "rf", "bprobit","probit"),
+                           labels = c("BART","BART Tuned", "NN", "RF", "B. Probit", "Probit"))) %>% 
+  group_by(n, data, a, variable) %>%
+  summarise(
+    mean_abs_bias = mean(abs_bias),
+    .groups = "drop"
+  ) %>% 
+  ggplot( aes(x = n, y = mean_abs_bias, color = variable, linetype = variable)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_linetype_manual("Model", values = c("solid", "solid","dotted", "dashed","solid", "solid")) +
+  scale_colour_manual("Model", values = paste0("grey", c(10, 30, 40, 50, 70, 90))) +
+  facet_grid(a ~ data) +
+  labs(
+    title = "Bias of Predictive Models Across Sample Sizes",
+    x = "Sample size (n)",
+    y = "Mean Absolute Bias",
+    color = "Model"
+  ) +
+  theme_bw(base_size = 13) +
+  theme(text=element_text(size = 25),legend.key.width = unit(2, "cm") ) 
+}
+  

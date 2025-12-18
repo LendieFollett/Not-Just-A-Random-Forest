@@ -362,3 +362,18 @@ all_combined %>%
   theme(text = element_text(size = 20))+
   scale_x_continuous(breaks = c(0, .5, 1))
 ggsave("corr_bin.pdf")
+
+
+library(reshape2)
+
+ac_long <- melt(all_combined, id.vars = c("n", "a", "sigma", "sparsity", "data", "true"))
+
+
+ac_long %>%
+  filter( sigma == 7 & a == "symmetric") %>% 
+  ggplot() +
+  geom_point(aes(x = true, y = value, colour = n), alpha = I(.5)) +
+  geom_abline(aes(slope = 1, intercept = 0))+
+  facet_grid(data~variable) +
+  labs(x = "True Probability", y = "Model-Estimated Probability")
+
