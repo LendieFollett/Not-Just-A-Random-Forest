@@ -228,20 +228,21 @@ rmse_plot <- function(results_combined, k, sig){
 results_combined %>%
     #filter(data != "Step") %>% 
     filter(sigma == sig & kind == k) %>% 
-  melt(id.vars = c("data", "rep", "n", "a", "kind", "sigma")) %>% 
-  filter(grepl("mse", variable) ) %>% 
+    melt(id.vars = c("data", "rep", "n", "a", "kind", "sigma", "mean_true")) %>%
+    filter(grepl("mse", variable)) %>%
   mutate(variable = factor(variable, 
-                           levels = c("bart_uncali_mse","bart_tuned_mse", "nn2_mse", "rf_uncali_mse", "probit_mse", "bprobit_mse"),
-                           labels = c("BART", "BART Tuned", "NN", "RF", "Probit", "Bayesian Probit"))) %>% 
+                           levels = c("bart_uncali_mse","bart_tuned_mse", "nn2_mse", "rf_uncali_mse", "bprobit_mse", "probit_mse"),
+                           labels = c("BART", "BART Tuned", "NN", "RF", "Bayesian Probit", "Probit"))) %>% 
   group_by(data, a, n, variable) %>% 
-  summarise(value = mean(value)) %>% 
+  summarise(value = mean(value)/mean_true) %>% 
   ggplot() +
   geom_line(aes(x = n, y = value, colour = factor(variable), group = factor(variable), linetype = factor(variable)), linewidth = 1.25) +
   geom_point(aes(x = n, y = value, colour = factor(variable)), size = 2) +
     scale_linetype_manual("Model", values = c("solid", "solid","dotted", "dashed","solid", "dashed")) +
     scale_colour_manual("Model", values = paste0("grey", c(10, 30, 40, 50, 70, 90))) +
   facet_grid(a~data, scales = "free_y") +
-  labs(x = "n", y = "RMSE") +
+  labs(x = "n", y = "RMSE (% of true WTP mean)") +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1))+
   #  scale_colour_brewer("Model", type = "qual", palette = "Dark2") +
   theme_bw()+
     theme(text=element_text(size = 25),legend.key.width = unit(2, "cm") ) +
@@ -257,16 +258,16 @@ cor_plot <- function(results_combined, k, sig){
     filter(grepl("probcor", variable) ) %>% 
     mutate(variable = factor(variable, 
                              levels = c("probcor_bart", "probcor_bart_tuned", "probcor_nn", "probcor_rf", "probcor_bprobit","probcor_probit"),
-                             labels = c("BART","BART Tuned", "NN", "RF", "B. Probit", "Probit"))) %>% 
+                             labels = c("BART","BART Tuned", "NN", "RF", "Bayesian Probit", "Probit"))) %>% 
     group_by(data, a, n, variable) %>% 
     summarise(value = mean(value)) %>% 
     ggplot() +
     geom_line(aes(x = n, y = value, colour = factor(variable), group = factor(variable), linetype = factor(variable)), linewidth = 1.25) +
     geom_point(aes(x = n, y = value, colour = factor(variable)), size = 2) +
-    scale_linetype_manual("Model", values = c("solid", "solid","dotted", "dashed","solid", "solid")) +
+    scale_linetype_manual("Model", values = c("solid", "solid","dotted", "dashed","solid", "dashed")) +
     scale_colour_manual("Model", values = paste0("grey", c(10, 30, 40, 50, 70, 90))) +
     facet_grid(a~data, scales = "free_y") +
-    labs(x = "n", y = "Correlation") +
+    labs(x = "Sample size (n)", y = "Correlation") +
     #scale_colour_grey("Model",start = 0, end = .8) +
     #  scale_colour_brewer("Model", type = "qual", palette = "Dark2") +
     theme_bw()+
@@ -290,7 +291,7 @@ results_combined %>%
   ) %>%
   mutate(variable = factor(model, 
                            levels = c("bart", "bart_tuned", "nn", "rf", "bprobit","probit"),
-                           labels = c("BART","BART Tuned", "NN", "RF", "B. Probit", "Probit"))) %>% 
+                           labels = c("BART","BART Tuned", "NN", "RF", "Bayesian Probit", "Probit"))) %>% 
   group_by(n, data, a, variable) %>%
   summarise(
     mean_abs_bias = mean(abs_bias),
@@ -299,13 +300,13 @@ results_combined %>%
   ggplot( aes(x = n, y = mean_abs_bias, color = variable, linetype = variable)) +
   geom_line(linewidth = 1) +
   geom_point(size = 2) +
-  scale_linetype_manual("Model", values = c("solid", "solid","dotted", "dashed","solid", "solid")) +
-  scale_colour_manual("Model", values = paste0("grey", c(10, 30, 40, 50, 70, 90))) +
+    scale_linetype_manual("Model", values = c("solid", "solid","dotted", "dashed","solid", "dashed")) +
+    scale_colour_manual("Model", values = paste0("grey", c(10, 30, 40, 50, 70, 90))) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1))+
   facet_grid(a ~ data) +
   labs(
-    title = "Bias of Predictive Models Across Sample Sizes",
     x = "Sample size (n)",
-    y = "Mean Absolute Bias",
+    y = "Bias (% of true WTP mean)",
     color = "Model"
   ) +
   theme_bw(base_size = 13) +

@@ -1,0 +1,105 @@
+---
+title: "Simulation Diagnostics: Correlation, Relative RMSE, and Bias"
+output:
+  pdf_document:
+    latex_engine: xelatex
+geometry: margin=0.6in, landscape
+fontsize: 12pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 12,
+  fig.height = 8
+)
+
+library(tidyverse)
+library(reshape2)
+library(ggplot2)
+library(scales)
+source("src/functions.R")
+all_combinedTRUE <- readRDS( paste0("output/all_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
+all_combinedFALSE <- readRDS( paste0("output/all_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
+all_combined <- rbind(all_combinedTRUE, all_combinedFALSE)
+
+
+results_combinedTRUE <- readRDS( paste0("output/results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
+results_combinedFALSE <- readRDS( paste0("output/results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
+results_combined <- rbind(results_combinedTRUE, results_combinedFALSE)
+
+
+results_combined <- results_combined %>% 
+  select(n, data, sigma,a,kind, rep, bart_uncali_mse,bart_tuned_mse, nn2_mse, rf_uncali_mse, probit_mse, bprobit_mse,
+         bart_uncali_bias,bart_tuned_bias, nn2_bias, rf_uncali_bias, probit_bias, bprobit_bias,
+         bart_uncali_bias_mn,bart_tuned_bias_mn, nn2_bias_mn, rf_uncali_bias_mn, probit_bias_mn, bprobit_bias_mn,
+         probcor_bart,probcor_bart_tuned, probcor_nn, probcor_rf, probcor_probit, probcor_bprobit,
+         mean_true, mean_bart, mean_probit, mean_bprobit, mean_bart_tuned, mean_nn, mean_rf,
+         ) %>% 
+  mutate(data = factor(data, levels = c("normal", "friedman", "step", "bin"),
+                       labels = c("Linear", "Friedman", "Step", "Binary"))
+  ) 
+
+
+
+# Assumes these objects/functions already exist in your environment:
+# - results_combined
+# - cor_plot()
+# - rmse_plot()   # should return relative RMSE (RMSE / mean_true) if you modified it
+# - bias_plot()
+
+# Helper for consistent, clear titles
+plot_title <- function(plot_type, k, sig) {
+  sparsity_txt <- ifelse(k == "Sparse",
+                         "Sparse coefficient vector",
+                         "Not sparse (full) coefficient vector")
+  paste0( " sigma = ", sig, ", ", sparsity_txt)
+}
+
+# Helper to print plot + force a page break after it
+print_plot_page <- function(p) {
+  print(p)
+  cat("\\newpage\n")
+}
+
+
+```
+
+# Correlation plots
+
+```{r cor_plots}
+for (k in c("Sparse", "Not Sparse")) {
+  for (sig in c(7, 15)) {
+    p <- cor_plot(results_combined, k = k, sig = sig) +
+      labs(title = plot_title("Correlation plot", k, sig))
+    print_plot_page(p)
+  }
+}
+```
+
+# Relative RMSE plots (RMSE / mean(true)) as percent
+
+```{r rmse_plots}
+for (k in c("Sparse", "Not Sparse")) {
+  for (sig in c(7, 15)) {
+    p <- rmse_plot(results_combined, k = k, sig = sig) +
+      labs(title = plot_title("Relative RMSE (RMSE / mean(true))", k, sig)) +
+      scale_y_continuous(labels = percent_format(accuracy = 1))
+    print_plot_page(p)
+  }
+}
+```
+
+# Bias plots
+
+```{r bias_plots}
+for (k in c("Sparse", "Not Sparse")) {
+  for (sig in c(7, 15)) {
+    p <- bias_plot(results_combined, k = k, sig = sig) +
+      labs(title = plot_title("Bias (mean absolute error in mean WTP)", k, sig))
+    print_plot_page(p)
+  }
+}
+```
