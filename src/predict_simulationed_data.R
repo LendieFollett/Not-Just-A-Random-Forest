@@ -17,6 +17,10 @@ library(rstanarm)
 #install.packages("ggplot2", dependencies = TRUE)
 source("src/functions.R")
 
+pkgs <- c(
+  "BART","rstanarm","dplyr","tidyr","purrr",
+  "randomForest","caret","logistf","Iso","reshape2"
+)
 numCores <- detectCores() - 1  # Use one less than the total number of cores
 cl <- makeCluster(numCores)
 
@@ -25,26 +29,24 @@ registerDoParallel(cl)
 a <- c(1,3) #1 = uniform, 3 = beta(3,1) (asymmetric)
 sigma <- c(1,2)  # low high
 
-n <- c(1500,1000, 500, 250) + 500
+n <- c(1250, 500, 250) + 500
 #reserve 500 for the test set
 
 comb <- expand.grid(a,sigma,n) %>% mutate(keep = paste0(Var1, Var2, Var3)) %>% pull(keep)
 
-registerDoParallel(cores = 4)  # Adjust the number of cores as needed
 
 #TO DO
 ## ADD ERROR VARIABILITY ONTO THE WTP PREDICTIONS FOR THE WTP_MEANS (saved in all)
 
-results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
-
-  foreach(reps = 1:100) %dopar% {
+results <- foreach(comb = comb, .packages = pkgs) %:%
+  foreach(reps = 1:50) %dopar% {
     #introduce sparsity into prediction matrix?
     sparsity = FALSE
     #covariates distribution
     a <- as.numeric(substr(comb, 1,1)); b = 1
     #error variance
     sigma <- as.numeric(substr(comb, 2,2))
-    sigma_1 <- c(7,15)[sigma]#c(5,10,15)[sigma] #small, medium, large
+    sigma_1 <- c(7,15)[sigma]
     sigma_2 <- c(7,15)[sigma]
     
     # Number of observations (sample size)
@@ -58,30 +60,33 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
     #number of x variables
     nP <- 10
   
-    #intercept 
+    #intercepts
     beta_N0 <- 80 
+    beta_f0 <- 70 
     beta_linear <- 30
     
     # X_i drawn from U[-1, 1]
     X <- rbeta(n*nP, a, b) %>% matrix(ncol = nP)#runif(n*nP, 0, 1) %>% matrix(ncol = nP)
     
-    # Normal WTP_i = beta_N0 + beta_linear * X_i + error term (normally distributed)
+    # Normal WTP_i = beta_N0 + beta_linear * X_i + error term
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
     mean_normal <- beta_N0 + beta_linear * X[,1]
     WTP_normal <- mean_normal + epsilon_Ni
+    
     #Friedman
-    mean_friedman <- beta_N0 +  2*(10*sin(pi*X[,1]*X[,2]) + 20*(X[,3] - 0.5)^2 + 10*X[,4] + 5*X[,5])
+    mean_friedman <- beta_f0 +  2*(10*sin(pi*X[,1]*X[,2]) + 20*(X[,3] - 0.5)^2 + 10*X[,4] + 5*X[,5])
     WTP_friedman <-  mean_friedman + rnorm(n, 0, sigma_2)
+    
     # Step function, normal error
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
-    mean_step <- beta_N0 + beta_linear * (X[,1] < 0.5) 
+    mean_step <- beta_N0 + beta_linear/2 * (X[,1] < 0.5) + beta_linear/2 * (X[,2] < 0.5)  
     WTP_step <- mean_step+ epsilon_Ni
     
     
     # Binary x's only, normal error
-    bin_beta <- c(5,10,-15,-25,10, -25, 25) %>% as.matrix()#c(5,10,-15,-25,10,25, 15) %>% as.matrix()#
+    bin_beta <- c(5,10,10,-15,10, 5, 10) %>% as.matrix()#c(5,10,-15,-25,10,25, 15) %>% as.matrix()#
     epsilon_Ni <- rnorm(n, mean = 0, sd = sigma_1)
-    X2 <- apply(X[,1:5], 2, function(x){ifelse(x > 0.5, 1, 0)})
+    X2 <- apply(X[,1:5], 2, function(x){ifelse(x > 0.5, 1, 0)}) #make it binary
     mean_bin = beta_N0 + as.matrix(data.frame(X2, X2[,1]*X2[,2], X2[,1]*X2[,3]))%*%(bin_beta)
     WTP_bin<- mean_bin + epsilon_Ni    
     
@@ -93,9 +98,11 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
       WTP_step = WTP_step,
       WTP_bin = WTP_bin
     )
-    
+    #ggplot() + geom_histogram(aes(x = data$WTP_bin)) + 
+      #geom_histogram(aes(x = data$WTP_friedman), fill = "red", alpha = I(.5)) + 
+     #geom_histogram(aes(x = data$WTP_step), fill = "blue", alpha = I(.5))
     # Print first few rows
-    head(data)
+    #head(data)
     A <- c(50, 75, 100, 125, 150)
     A_samps <- sample(A, size = nrow(data), replace=TRUE) %>% as.matrix
     
@@ -115,7 +122,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
     test.wtp <- data[-train.idx,]
     
     # Set up data and test points
-    pts <- c(A, c(0, 151))
+    pts <- c(A, c(0, 150*1.1))
     epts <- c(min(pts), max(pts))
     
     test$ID <- 1:nrow(test)
@@ -217,7 +224,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
         k     = c(1, 2, 3)
       )
       
-      ## untuned BART (what you already had) ----------
+      ## untuned BART ----------
       b <- pbart(
         x.train = as.matrix(train[, xa_list]),
         y.train = train[, c],
@@ -237,7 +244,7 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
         ndpost      = ndpost
       )
       
-      ##  Tuned BART via internal train/validation split --------
+      ##  Tuned BART via train/validation split --------
       set.seed(10 + r + j)   # keep tuning reproducible but vary by rep/outcome
       
       # 80/20 split of 'train' for BART tuning
@@ -258,8 +265,8 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
           x.test  = bart_x_valid_cv,
           ntree   = ntree_i,
           k       = k_i,
-          ndpost  = 1000,
-          nskip   = 1000
+          ndpost  = 500,
+          nskip   = 500
         )
         
         p_valid <- colMeans(fit_cv$prob.test)
@@ -328,7 +335,8 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                           family = binomial(link = "probit"), 
                           prior = normal(0, 1), 
                           prior_intercept = normal(0, 1), 
-                          chains = 1, iter = 1000,
+                          chains = 1, iter=600, warmup=300,
+                          refresh=0, 
                           init = "0")
       bprobit_probs <- posterior_epred(bprobit, newdata = bprobit_test) %>% colMeans
       bcoefs <- as.data.frame(bprobit) %>% apply(2, mean)
@@ -436,6 +444,14 @@ results <- foreach(comb = comb, .packages = c('BART', 'rstanarm')) %:%
                                  probit_prob_mse = mean((probit_probs - true_probs[-train.idx,c])^2)^0.5,
                                  bprobit_prob_mse = mean((bprobit_probs - true_probs[-train.idx,c])^2)^0.5
                                  )
+      #save results in real time for monitoring
+      out_dir <- "output/live_results"
+      safe_tag <- function(comb, rep, outcome) {
+        x <- paste0("comb_", comb, "_rep_", rep, "_y_", outcome)
+        gsub("[^A-Za-z0-9_=.-]", "_", x)  # make filename safe
+      }
+      tag <- safe_tag(comb, r, gsub("WTP_", "", c))
+      saveRDS(results[[j]], file = file.path(out_dir, paste0("results_", tag, ".rds")))
 
       probs[[j]]  <- data.frame(true = true_probs[-train.idx,c],
                                  bart = bart_probs,
@@ -463,8 +479,8 @@ results_combined <- do.call(rbind, lapply(results, function(x) do.call(rbind, la
 
 sparsity = FALSE
 
-saveRDS(all_combined, paste0("output/all_combined_",sparsity,".RDS"))
-saveRDS(results_combined, paste0("output/results_combined_",sparsity,".RDS"))
+saveRDS(all_combined, paste0("output/all_combined_",sparsity,"2.RDS"))
+saveRDS(results_combined, paste0("output/results_combined_",sparsity,"2.RDS"))
 
 #results_combinedTRUE <- readRDS( paste0("results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
 #results_combinedFALSE <- readRDS( paste0("results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")

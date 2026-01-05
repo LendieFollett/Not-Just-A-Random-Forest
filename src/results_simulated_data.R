@@ -5,7 +5,7 @@ all_combinedFALSE <- readRDS( paste0("output/all_combined_",FALSE,".RDS")) %>% m
 all_combined <- rbind(all_combinedTRUE, all_combinedFALSE)
 
 
-results_combinedTRUE <- readRDS( paste0("output/results_combined_",TRUE,".RDS")) %>% mutate(kind = "Sparse")
+results_combinedTRUE <- readRDS( paste0("output/results_combined_",TRUE,"2.RDS")) %>% mutate(kind = "Sparse")
 results_combinedFALSE <- readRDS( paste0("output/results_combined_",FALSE,".RDS")) %>% mutate(kind = "Not Sparse")
 results_combined <- rbind(results_combinedTRUE, results_combinedFALSE)
 
@@ -15,7 +15,7 @@ results_combined <- results_combined %>%
          bart_uncali_bias,bart_tuned_bias, nn2_bias, rf_uncali_bias, probit_bias, bprobit_bias,
          bart_uncali_bias_mn,bart_tuned_bias_mn, nn2_bias_mn, rf_uncali_bias_mn, probit_bias_mn, bprobit_bias_mn,
          probcor_bart,probcor_bart_tuned, probcor_nn, probcor_rf, probcor_probit, probcor_bprobit,
-         mean_true, mean_bart, mean_probit, mean_bprobit, mean_bart_tuned, mean_nn, mean_rf,
+         mean_true, mean_bart, mean_probit, mean_bprobit, mean_bart_tuned, mean_nn, mean_rf_uncali,
          ) %>% 
   mutate(data = factor(data, levels = c("normal", "friedman", "step", "bin"),
                        labels = c("Linear", "Friedman", "Step", "Binary"))
@@ -24,51 +24,59 @@ results_combined <- results_combined %>%
 
 #CORRELATION PLOT
 
-p <- cor_plot(results_combined, k = "Sparse", sig = 7);p# + labs(caption="Sigma = 7, sparse coefficient vector");p
-ggsave(paste0("RMSE_",TRUE,"_7",".pdf"),plot = p, width = 20, height = 15)
+p <- cor_plot(results_combined, sym = "symmetric", sig = 7);p# + labs(caption="Sigma = 7, sparse coefficient vector");p
+ggsave(paste0("cor_","sym","_7",".pdf"),plot = p, width = 20, height = 15)
 #small sigma, sparse --> bart benefits from tuning in step and binary
 
-p <- cor_plot(results_combined, k = "Sparse", sig = 15);p #+ labs(caption="Sigma = 15, sparse coefficient vector");p
-ggsave(paste0("RMSE_",TRUE,"_15",".pdf"),plot = p, width = 20, height = 15)
+p <- cor_plot(results_combined, sym = "symmetric", sig = 15);p #+ labs(caption="Sigma = 15, sparse coefficient vector");p
+ggsave(paste0("cor_","sym","_15",".pdf"),plot = p, width = 20, height = 15)
 #benefit of tuning no longer there when sigma increases
 
-p <- cor_plot(results_combined, k = "Not Sparse", sig = 7);p#+ labs(caption="Sigma = 7, full coefficient vector");p
-ggsave(paste0("RMSE_",FALSE,"_7",".pdf"),plot = p, width = 20, height = 15)
+p <- cor_plot(results_combined, sym = "asymmetric", sig = 7);p#+ labs(caption="Sigma = 7, full coefficient vector");p
+ggsave(paste0("cor_","asym","_7",".pdf"),plot = p, width = 20, height = 15)
 #again, for small sigma non-sparse situations, benefit to tuning bart, though mostly for binary
 
-p <- cor_plot(results_combined, k = "Not Sparse", sig = 15);p#+ labs(caption="Sigma = 15, full coefficient vector");p
-ggsave(paste0("RMSE_",FALSE,"_15",".pdf"),plot = p, width = 20, height = 15)
+p <- cor_plot(results_combined, sym = "asymmetric", sig = 15);p#+ labs(caption="Sigma = 15, full coefficient vector");p
+ggsave(paste0("cor_","asym","_15",".pdf"),plot = p, width = 20, height = 15)
 
 
 #RMSE PLOT
 #LRF TO DO - DIVIDE BY AVERAGE WTP
-p <- rmse_plot(results_combined, k = "Sparse", sig = 7);p# + labs(caption="Sigma = 7, sparse coefficient vector");p
-ggsave(paste0("RMSE_",TRUE,"_7",".pdf"),plot = p, width = 20, height = 15)
+p <- rmse_plot(results_combined, sym = "symmetric", sig = 7);p# + labs(caption="Sigma = 7, sparse coefficient vector");p
+ggsave(paste0("RMSE_","sym","_7",".pdf"),plot = p, width = 20, height = 15)
 
-p <- rmse_plot(results_combined, k = "Sparse", sig = 15);p #+ labs(caption="Sigma = 15, sparse coefficient vector");p
-ggsave(paste0("RMSE_",TRUE,"_15",".pdf"),plot = p, width = 20, height = 15)
+p <- rmse_plot(results_combined, sym = "symmetric", sig = 15);p #+ labs(caption="Sigma = 15, sparse coefficient vector");p
+ggsave(paste0("RMSE_","sym","_15",".pdf"),plot = p, width = 20, height = 15)
 
-p <- rmse_plot(results_combined, k = "Not Sparse", sig = 7);p#+ labs(caption="Sigma = 7, full coefficient vector");p
-ggsave(paste0("RMSE_",FALSE,"_7",".pdf"),plot = p, width = 20, height = 15)
+p <- rmse_plot(results_combined, sym = "asymmetric", sig = 7);p#+ labs(caption="Sigma = 7, full coefficient vector");p
+ggsave(paste0("RMSE_","asym","_7",".pdf"),plot = p, width = 20, height = 15)
 
-p <- rmse_plot(results_combined, k = "Not Sparse", sig = 15);p#+ labs(caption="Sigma = 15, full coefficient vector");p
-ggsave(paste0("RMSE_",FALSE,"_15",".pdf"),plot = p, width = 20, height = 15)
+p <- rmse_plot(results_combined, sym = "asymmetric", sig = 15);p#+ labs(caption="Sigma = 15, full coefficient vector");p
+ggsave(paste0("RMSE_","asym","_15",".pdf"),plot = p, width = 20, height = 15)
 
 
 #BIAS PLOT
-# divide this by avg wtp too?
-p <- bias_plot(results_combined, k = "Sparse", sig = 7);p# + labs(caption="Sigma = 7, sparse coefficient vector");p
-ggsave(paste0("bias_",TRUE,"_7",".pdf"),plot = p, width = 20, height = 15)
 
-p <- bias_plot(results_combined, k = "Sparse", sig = 15);p #+ labs(caption="Sigma = 15, sparse coefficient vector");p
-ggsave(paste0("bias_",TRUE,"_15",".pdf"),plot = p, width = 20, height = 15)
+p <- bias_plot(results_combined, sym = "symmetric", sig = 7);p# + labs(caption="Sigma = 7, sparse coefficient vector");p
+ggsave(paste0("bias_","sym","_7",".pdf"),plot = p, width = 20, height = 15)
 
-p <- bias_plot(results_combined, k = "Not Sparse", sig = 7);p#+ labs(caption="Sigma = 7, full coefficient vector");p
-ggsave(paste0("bias_",FALSE,"_7",".pdf"),plot = p, width = 20, height = 15)
+p <- bias_plot(results_combined, sym = "symmetric", sig = 15);p #+ labs(caption="Sigma = 15, sparse coefficient vector");p
+ggsave(paste0("bias_","sym","_15",".pdf"),plot = p, width = 20, height = 15)
 
-p <- bias_plot(results_combined, k = "Not Sparse", sig = 15);p#+ labs(caption="Sigma = 15, full coefficient vector");p
-ggsave(paste0("bias_",FALSE,"_15",".pdf"),plot = p, width = 20, height = 15)
+p <- bias_plot(results_combined, sym = "asymmetric", sig = 7);p#+ labs(caption="Sigma = 7, full coefficient vector");p
+ggsave(paste0("bias_","asym","_7",".pdf"),plot = p, width = 20, height = 15)
 
+p <- bias_plot(results_combined, sym = "asymmetric", sig = 15);p#+ labs(caption="Sigma = 15, full coefficient vector");p
+ggsave(paste0("bias_","asym","_15",".pdf"),plot = p, width = 20, height = 15)
+
+
+
+#significance testing
+
+ts <- get_tabs(results_combined)
+
+ts$xt_bias
+ts$xt_mse
 
 
 dcurves <- all_combined%>% 

@@ -66,7 +66,7 @@ get_wtp2 <- function(pred_matrix, test_ends,test_notends, ndpost){
   max_pts <- max(pts)
   print("first")
   # Create a matrix instead of repeatedly assigning NA columns
-  test_ends[paste0("Rep", 1:ndpost)] <- as.numeric(!test_ends$A == max_pts)
+  test_ends[paste0("Rep", 1:ndpost)] <- as.numeric(test_ends$A != max_pts)
   
   pred_matrix2 <- data.frame(pred_matrix) 
   colnames(pred_matrix2) <- gsub("X", "Rep", colnames(pred_matrix2))
@@ -96,7 +96,7 @@ get_wtp2 <- function(pred_matrix, test_ends,test_notends, ndpost){
   #calculate weighted sum
   #for negative differences (non-monotonicity), give a value of 0
   # Precompute unique 'A' values and their max to avoid recalculating in every group
-  max_A <- max(tdat_long$A, na.rm = TRUE)
+  max_A <- max(tdat_long$A, na.rm = TRUE) 
   
   # Create an optimized pipeline
   tdat_long2 <- tdat_long %>%
@@ -163,9 +163,6 @@ get_wtp_point <- function(pred_vector, test_ends,test_notends){
     arrange(ID, A)
   
   
-  
-  
-  
   tdat <- tdat %>% select("ID", "A",paste0("Rep1"))
   
   
@@ -174,10 +171,11 @@ get_wtp_point <- function(pred_vector, test_ends,test_notends){
     #select(-starts_with("Rep")) %>% 
     melt(id.vars = c("ID", "A"))# %>% 
   #filter(!is.na(hh_income))
+  max_A<- max(tdat_long$A, na.rm = TRUE) 
   
   tdat_long2 <- tdat_long%>% 
     group_by(ID,variable) %>% #hh_income, variable, age
-    summarise(wtp_q = integrate(approxfun(A[!is.na(value)],value[!is.na(value)]), 0, 150)$value) %>% 
+    summarise(wtp_q = integrate(approxfun(A[!is.na(value)],value[!is.na(value)]), 0, max_A)$value) %>% 
     ungroup %>% 
     group_by(ID) %>% 
     summarise(wtp_q = mean(wtp_q))
@@ -198,49 +196,23 @@ make_bins <- function(df){
 }
 
 
-mae_plot <- function(results_combined,k, sig){
-  results_combined %>%
-    #filter(data != "Step") %>% 
-    filter(sigma == sig& kind == k) %>% 
-    melt(id.vars = c("data", "rep",  "n", "a", "kind", "sigma")) %>% 
-    filter(grepl("bias", variable) & !grepl("bprobit", variable)& grepl("mn", variable)) %>% 
-    mutate(variable = factor(variable, 
-                             levels = c("bart_uncali_bias_mn", "nn2_bias_mn", "rf_uncali_bias_mn", "probit_bias_mn"),
-                             labels = c("BART", "NN", "RF", "Probit"))) %>% 
-    group_by(data, a, n, variable) %>% 
-    summarise(value = mean(abs(value))) %>% 
-    ggplot() +
-    geom_line(aes(x = n, y = value, colour = factor(variable), linetype = factor(variable), group = factor(variable))) +
-    geom_point(aes(x = n, y = value, colour = factor(variable))) +
-    #geom_hline(aes(yintercept = 0)) +
-    facet_grid(a~data, scales = "free_y") +
-    labs(x = "n", y = "MAE (median)", colour = "Model", linetype = "Model") +
-    scale_linetype_manual("Model", values = c("solid", "solid","dotted", "dashed","solid", "solid")) +
-    scale_colour_manual("Model", values = paste0("grey", c(10, 30, 40, 50, 70, 90))) +
-    theme_bw()+
-    theme(text=element_text(size = 20)) +
-    scale_x_continuous(breaks = unique(results_combined$n)) #+
-    #scale_y_continuous(limits = c(0,4))
-}
 
-
-rmse_plot <- function(results_combined, k, sig){
+rmse_plot <- function(results_combined, sym, sig){ 
 results_combined %>%
-    #filter(data != "Step") %>% 
-    filter(sigma == sig & kind == k) %>% 
+    filter(sigma == sig & a == sym) %>%  #for a given sigma and x symmetry
     melt(id.vars = c("data", "rep", "n", "a", "kind", "sigma", "mean_true")) %>%
     filter(grepl("mse", variable)) %>%
   mutate(variable = factor(variable, 
                            levels = c("bart_uncali_mse","bart_tuned_mse", "nn2_mse", "rf_uncali_mse", "bprobit_mse", "probit_mse"),
                            labels = c("BART", "BART Tuned", "NN", "RF", "Bayesian Probit", "Probit"))) %>% 
-  group_by(data, a, n, variable) %>% 
-  summarise(value = mean(value)/mean_true) %>% 
+  group_by(data, kind, n, variable) %>% 
+  summarise(value = mean(value)/mean(mean_true)) %>% 
   ggplot() +
   geom_line(aes(x = n, y = value, colour = factor(variable), group = factor(variable), linetype = factor(variable)), linewidth = 1.25) +
   geom_point(aes(x = n, y = value, colour = factor(variable)), size = 2) +
     scale_linetype_manual("Model", values = c("solid", "solid","dotted", "dashed","solid", "dashed")) +
     scale_colour_manual("Model", values = paste0("grey", c(10, 30, 40, 50, 70, 90))) +
-  facet_grid(a~data, scales = "free_y") +
+  facet_grid(kind~data, scales = "free_y") +
   labs(x = "n", y = "RMSE (% of true WTP mean)") +
     scale_y_continuous(labels = scales::percent_format(accuracy = 1))+
   #  scale_colour_brewer("Model", type = "qual", palette = "Dark2") +
@@ -250,23 +222,23 @@ results_combined %>%
 }
   
   
-cor_plot <- function(results_combined, k, sig){
+cor_plot <- function(results_combined, sym, sig){
   results_combined %>%
     #filter(data != "Step") %>% 
-    filter(sigma == sig & kind == k) %>% 
+    filter(sigma == sig & a == sym) %>% 
     melt(id.vars = c("data", "rep", "n", "a", "kind", "sigma")) %>% 
     filter(grepl("probcor", variable) ) %>% 
     mutate(variable = factor(variable, 
                              levels = c("probcor_bart", "probcor_bart_tuned", "probcor_nn", "probcor_rf", "probcor_bprobit","probcor_probit"),
                              labels = c("BART","BART Tuned", "NN", "RF", "Bayesian Probit", "Probit"))) %>% 
-    group_by(data, a, n, variable) %>% 
+    group_by(data, kind, n, variable) %>% 
     summarise(value = mean(value)) %>% 
     ggplot() +
     geom_line(aes(x = n, y = value, colour = factor(variable), group = factor(variable), linetype = factor(variable)), linewidth = 1.25) +
     geom_point(aes(x = n, y = value, colour = factor(variable)), size = 2) +
     scale_linetype_manual("Model", values = c("solid", "solid","dotted", "dashed","solid", "dashed")) +
     scale_colour_manual("Model", values = paste0("grey", c(10, 30, 40, 50, 70, 90))) +
-    facet_grid(a~data, scales = "free_y") +
+    facet_grid(kind~data, scales = "free_y") +
     labs(x = "Sample size (n)", y = "Correlation") +
     #scale_colour_grey("Model",start = 0, end = .8) +
     #  scale_colour_brewer("Model", type = "qual", palette = "Dark2") +
@@ -276,10 +248,10 @@ cor_plot <- function(results_combined, k, sig){
 }
 
 
-bias_plot <- function(results_combined, k, sig){
+bias_plot <- function(results_combined, sym, sig){
 results_combined %>%
-  filter(sigma == sig & kind == k) %>% 
-  select("n" ,"data" ,"sigma", "a" ,"kind","rep","mean_true","mean_bart" ,"mean_probit", "mean_bprobit" ,"mean_bart_tuned" , "mean_nn","mean_rf" ) %>% 
+  filter(sigma == sig & a == sym) %>% 
+  select("n" ,"data" ,"sigma", "a" ,"kind","rep","mean_true","mean_bart" ,"mean_probit", "mean_bprobit" ,"mean_bart_tuned" , "mean_nn","mean_rf_uncali" ) %>% 
   pivot_longer(
     cols = starts_with("mean_") & !matches("mean_true"),
     names_to = "model",
@@ -287,12 +259,12 @@ results_combined %>%
   ) %>%
   mutate(
     model = sub("^mean_", "", model),
-    abs_bias = abs(mean_hat - mean_true)/mean_true
+    abs_bias = (mean_hat - mean_true)/mean_true
   ) %>%
   mutate(variable = factor(model, 
-                           levels = c("bart", "bart_tuned", "nn", "rf", "bprobit","probit"),
+                           levels = c("bart", "bart_tuned", "nn", "rf_uncali", "bprobit","probit"),
                            labels = c("BART","BART Tuned", "NN", "RF", "Bayesian Probit", "Probit"))) %>% 
-  group_by(n, data, a, variable) %>%
+  group_by(n, data, kind, variable) %>%
   summarise(
     mean_abs_bias = mean(abs_bias),
     .groups = "drop"
@@ -303,7 +275,7 @@ results_combined %>%
     scale_linetype_manual("Model", values = c("solid", "solid","dotted", "dashed","solid", "dashed")) +
     scale_colour_manual("Model", values = paste0("grey", c(10, 30, 40, 50, 70, 90))) +
     scale_y_continuous(labels = scales::percent_format(accuracy = 1))+
-  facet_grid(a ~ data) +
+  facet_grid(kind ~ data) +
   labs(
     x = "Sample size (n)",
     y = "Bias (% of true WTP mean)",
@@ -313,3 +285,98 @@ results_combined %>%
   theme(text=element_text(size = 25),legend.key.width = unit(2, "cm") ) 
 }
   
+
+
+
+get_tabs <- function(res_so_far){ #give it results_combined
+  ttest_mse <- res_so_far %>%
+    select(n, data, sigma, kind, a, rep, matches("((_mse|_bias_mn)$)")) %>% 
+    group_by(n, data, sigma, kind, a) %>%
+    summarise(
+      n_pairs = n(),
+      mean_diff = mean(probit_mse - bart_uncali_mse),
+      sd_diff = sd(probit_mse - bart_uncali_mse),
+      t_test = list(t.test(probit_mse, bart_uncali_mse, paired = TRUE)), #positive test stat means bart better
+      .groups = "drop"
+    ) %>%
+    mutate(
+      t_stat = map_dbl(t_test, ~ .x$statistic),
+      direction = ifelse(t_stat > 0, "bart", "probit"), #favors bart or probit
+      p_value = map_dbl(t_test, ~ .x$p.value)
+    ) %>% mutate(    sig = p_value < 0.025)
+  
+  
+  
+  ttest_bias <- res_so_far %>%
+    select(n, data, sigma, kind, a, rep, matches("((_mse|_bias_mn)$)")) %>% 
+    group_by(n, data, sigma, kind, a) %>%
+    summarise(
+      n_pairs = n(),
+      probit_mean = mean(probit_bias_mn),
+      bart_mean = mean(bart_uncali_bias_mn),
+      mean_diff = mean(abs(probit_bias_mn) - abs(bart_uncali_bias_mn)),
+      sd_diff = sd(abs(probit_bias_mn) - abs(bart_uncali_bias_mn)),
+      t_test = list(t.test(abs(probit_bias_mn), abs(bart_uncali_bias_mn), paired = TRUE)), #positive test stat means bart better
+      .groups = "drop"
+    ) %>%
+    mutate(
+      t_stat = map_dbl(t_test, ~ .x$statistic),
+      direction = ifelse(t_stat > 0, "bart", "probit"), #favors bart or probit
+      p_value = map_dbl(t_test, ~ .x$p.value)
+    ) %>% mutate(    sig = p_value < 0.025)
+  
+  
+  
+  bias_tab <- ttest_bias %>% 
+    group_by(sig, direction) %>% 
+    count() %>%
+    mutate(
+      sig = ifelse(sig, "Significant", "Not significant"),
+      direction = ifelse(direction == "bart", "BART", "Probit")
+    ) %>%
+    pivot_wider(
+      names_from = direction,
+      values_from = n,
+      values_fill = 0
+    ) %>%
+    arrange(sig) %>%
+    tibble::column_to_rownames("sig") %>%
+    as.matrix()
+  
+  bias_mat_margins <- addmargins(bias_tab)
+  
+  mse_tab <- ttest_mse %>% 
+    group_by(sig, direction) %>% 
+    count()%>%
+    mutate(
+      sig = ifelse(sig, "Significant", "Not significant"),
+      direction = ifelse(direction == "bart", "BART", "Probit")
+    ) %>%
+    pivot_wider(
+      names_from = direction,
+      values_from = n,
+      values_fill = 0
+    ) %>%
+    arrange(sig) %>%
+    tibble::column_to_rownames("sig") %>%
+    as.matrix()
+  
+  mse_mat_margins <- addmargins(mse_tab)
+  
+  
+  library(xtable)
+ 
+  return(list( 
+  xt_bias = xtable(
+    bias_mat_margins,
+    caption = "Bias (mean-based)",
+    label = "tab:ttest_bias"
+  )
+  ,
+  xt_mse = xtable(
+    mse_mat_margins,
+    caption = "RMSE",
+    label = "tab:ttest_mse"
+  )))
+  
+}
