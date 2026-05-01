@@ -19,8 +19,6 @@ The simulation study code (results_simulated_data.R), which uses parallelization
 
 ## Data Availability and Provenance Statements
 
-Questionnaire is made available in [ENTER LOCATION HERE]. Resulting data stored in BART_restricted.csv in the raw subfolder.
-
 
 ### Statement about Rights
 
@@ -38,122 +36,25 @@ Questionnaire is made available in [ENTER LOCATION HERE]. Resulting data stored 
 
 ### Summary of Availability
 
-- [ ] All data **are** publicly available.
+- [x] All data **are** publicly available.
 - [ ] Some data **cannot be made** publicly available.
 - [ ] **No data can be made** publicly available.
 
-> INSTRUCTIONS: If *No or some data can be made* **publicly** available, the journal may require that data be preserved for a specified time.
+### Accessing Data
 
-- [ ] Confidential data used in this paper and not provided as part of the public replication package will be preserved for ___ years after publication, in accordance with journal policies. 
-
-
-#### Summary of Data Availability
-
-> A summary in tabular form can be useful:
-
-*Example*:
-
-| Data.Name  | Data.Files | Location | Provided | Citation |
-| -- | -- | -- | -- | -- | 
-| “Current Population Survey 2018” | cepr_march_2018.dta | data/ | TRUE | CEPR (2018) |
-| “Provincial Administration Reports” | coast_simplepoint2.csv; rivers_simplepoint2.csv; RAIL_dummies.dta; railways_Dissolve_Simplify_point2.csv | Data/maps/ | TRUE | Administration (2017) |
-| “2017 SAT scores” | Not available | data/to_clean/ | FALSE | College Board (2020) |
-
-where the `Data.Name` column is then expanded in the subsequent paragraphs, and `CEPR (2018)` is resolved in the References section of the README.
-
-### Details on each Data Source
-
-> INSTRUCTIONS: For each data source, list the file that contains data from that source here; if providing combined/derived datafiles, list them separately after the DAS. For each data source or file, as appropriate, 
-> 
-> - Describe the format (open formats preferred, but some software-specific formats OK if open-source readers available): `.dta`, `.xlsx`, `.csv`, `netCDF`, etc.
-> - Provide a data dictionary, either as part of the archive (list the file name), or at a URL (list the URL). Some formats are self-describing *if* they have the requisite information (e.g., `.dta` should have both variable and value labels).
-> - List availability within the package
-> - Use proper bibliographic references in addition to a verbose description (and provide a bibliography at the end of the README, expanding those references)
-> - Describe how you obtained access to the data.
-> - If different, describe how others can obtain access to the data. 
-> - Mention any relevant restrictions: approximate cost, required residency, necessary physical location, access only from within country or through VPN, etc.
-
-
-
-### Example for public use data collected by the authors
-
-> The [DATA TYPE] data used to support the findings of this study have been deposited in the [NAME] repository ([DOI or OTHER PERSISTENT IDENTIFIER]). [[1](https://www.hindawi.com/research.data/#statement.templates)]. The data were collected by the authors, and are available under a Creative Commons Non-commercial license.
-
-### Example for public use data sourced from elsewhere and provided
-
-> Data on National Income and Product Accounts (NIPA) were downloaded from the U.S. Bureau of Economic Analysis (BEA, 2016). We use Table 30. Data can be downloaded from https://apps.bea.gov/regional/downloadzip.cfm, under "Personal Income (State and Local)", select CAINC30: Economic Profile by County, then download. Data can also be directly downloaded using  https://apps.bea.gov/regional/zip/CAINC30.zip. A copy of the data is provided as part of this archive. The data are in the public domain.
-
-Datafile:  `CAINC30__ALL_AREAS_1969_2018.csv`
-
-### Example for public use data with required registration and provided extract
-
-> The paper uses IPUMS Terra data (Ruggles et al, 2018). IPUMS-Terra does not allow for redistribution, except for the purpose of replication archives. Permissions as per https://terra.ipums.org/citation have been obtained, and are documented within the "data/IPUMS-terra" folder.
->> Note: the reference to "Ruggles et al, 2018" would be resolved in the Reference section of this README, **and** in the main manuscript.
-
-Datafile: `data/raw/ipums_terra_2018.dta`
-
-### Example for free use data with required registration, extract not provided
-
-> The paper uses data from the World Values Survey Wave 6 (Inglehart et al, 2019). Data is subject to a redistribution restriction, but can be freely downloaded from http://www.worldvaluessurvey.org/WVSDocumentationWV6.jsp. Choose `WV6_Data_Stata_v20180912`, fill out the registration form, including a brief description of the project, and agree to the conditions of use. Note: "the data files themselves are not redistributed" and other conditions. Save the file in the directory `data/raw`. 
-
->> Note: the reference to "Inglehart et al, 2018" would be resolved in the Reference section of this README, **and** in the main manuscript.
-
-Datafile: `data/raw/WV6_Data_Stata_v20180912.dta` (not provided)
-
-### Example for confidential data
-
-> INSTRUCTIONS: Citing and describing confidential data, in particular when it does not have a regular distribution channel or online landing page, can be tricky. A citation can be crafted ([see guidance](https://social-science-data-editors.github.io/guidance/FAQ.html#data-citation-without-online-link)), and the DAS should describe how to access, whom to contact (including the role of the particular person, should that person retire), and other relevant information, such as required citizenship status or cost.
-
-> The data for this project (DESE, 2019) are confidential, but may be obtained with Data Use Agreements with the Massachusetts Department of Elementary and Secondary Education (DESE). Researchers interested in access to the data may contact [NAME] at [EMAIL], also see www.doe.mass.edu/research/contact.html. It can take some months to negotiate data use agreements and gain access to the data. The author will assist with any reasonable replication attempts for two years following publication.
-
-### Example for confidential Census Bureau data
-
-> All the results in the paper use confidential microdata from the U.S. Census Bureau. To gain access to the Census microdata, follow the directions here on how to write a proposal for access to the data via a Federal Statistical Research Data Center: https://www.census.gov/ces/rdcresearch/howtoapply.html. 
-You must request the following datasets in your proposal:
->1. Longitudinal Business Database (LBD), 2002 and 2007
->2. Foreign Trade Database – Import (IMP), 2002 and 2007
-[...]
-
-(adapted from [Fort (2016)](https://doi.org/10.1093/restud/rdw057))
-
-### Example for preliminary code during the editorial process
-
-> Code for data cleaning and analysis is provided as part of the replication package. It is available at https://github.com/LendieFollett/Not-Just-A-Random-Forest for review. It will be uploaded to the [JOURNAL REPOSITORY] once the paper has been conditionally accepted.
-
-## Dataset list
-
-> INSTRUCTIONS: In some cases, authors will provide one dataset (file) per data source, and the code to combine them. In others, in particular when data access might be restrictive, the replication package may only include derived/analysis data. Every file should be described. This can be provided as a Excel/CSV table, or in the table below.
-
-> INSTRUCTIONS: While it is often most convenient to provide data in the native format of the software used to analyze and process the data, not all formats are "open" and can be read by other (free) software. Data should at a minimum be provided in formats that can be read by open-source software (R, Python, others), and ideally be provided in non-proprietary, archival-friendly formats. 
-
-> INSTRUCTIONS: All data files should be fully documented: variables/columns should have labels (long-form meaningful names), and values should be explained. This might mean generating a codebook, pointing at a public codebook, or providing data in (non-proprietary) formats that allow for a rich description. This is in particular important for data that is not distributable.
-
-> INSTRUCTIONS: Some journals require, and it is considered good practice, to provide synthetic or simulated data that has some of the key characteristics of the restricted-access data which are not provided. The level of fidelity may vary - it may be useful for debugging only, or it should allow to assess the key characteristics of the statistical/econometric procedure or the main conclusions of the paper.
-
-| Data file | Source | Notes    |Provided |
-|-----------|--------|----------|---------|
-| `data/raw/lbd.dta` | LBD | Confidential | No |
-| `data/raw/terra.dta` | IPUMS Terra | As per terms of use | Yes |
-| `data/derived/regression_input.dta`| All listed | Combines multiple data sources, serves as input for Table 2, 3 and Figure 5. | Yes |
-
-
-## Computational requirements
-
-> INSTRUCTIONS: In general, the specific computer code used to generate the results in the article will be within the repository that also contains this README. However, other computational requirements - shared libraries or code packages, required software, specific computing hardware - may be important, and is always useful, for the goal of replication. Some example text follows. 
-
-> INSTRUCTIONS: We strongly suggest providing setup scripts that install/set up the environment. Sample scripts for [Stata](https://github.com/gslab-econ/template/blob/master/config/config_stata.do),  [R](https://github.com/labordynamicsinstitute/paper-template/blob/master/programs/global-libraries.R), [Julia](https://github.com/labordynamicsinstitute/paper-template/blob/master/programs/packages.jl) are easy to set up and implement. Specific software may have more sophisticated tools: [Python](https://pip.pypa.io/en/stable/user_guide/#ensuring-repeatability), [Julia](https://julia.quantecon.org/more_julia/tools_editors.html#Package-Environments).
+Datafile:  `raw/BART_restricted.csv`
 
 ### Software Requirements
 
-> INSTRUCTIONS: List all of the software requirements, up to and including any operating system requirements, for the entire set of code. It is suggested to distribute most dependencies together with the replication package if allowed, in particular if sourced from unversioned code repositories, Github repos, and personal webpages. In all cases, list the version *you* used. All packages should be listed in human-readable form in this README, but should also be included in a setup or install script.
+- All computations are done using the R language. 
 
-- [ ] The replication package contains one or more programs to install all dependencies and set up the necessary directory structure. [HIGHLY RECOMMENDED]
+- [x] The replication package contains one or more programs to install all dependencies and set up the necessary directory structure. [HIGHLY RECOMMENDED]
 
 
-- R 3.4.3
+- R 4.5.1 (2025-06-13)-- "Great Square Root"
   - `tidyr` (0.8.3)
   - `rdrobust` (0.99.4)
-  - the file "`0_setup.R`" will install all dependencies (latest version), and should be run once prior to running other programs.
+  - the file "`src/env_setup.R`" will install all dependencies (latest version), and should be run once prior to running other programs.
 
 ### Controlled Randomness
 
