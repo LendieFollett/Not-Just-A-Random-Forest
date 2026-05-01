@@ -22,14 +22,11 @@ Users wishing to verify functionality rather than reproduce all results exactly 
 - [x] I certify that the author(s) of the manuscript have legitimate access to and permission to use the data used in this manuscript. 
 - [x] I certify that the author(s) of the manuscript have documented permission to redistribute/publish the data contained within this replication package. Appropriate permission are documented in the LICENSE.txt file file.
 
-### (Optional, but recommended) License for Data
+### License for Data
 
-> INSTRUCTIONS: Most data repositories provide for a default license, but do not impose a specific license. Authors should actively select a license. This should be provided in a LICENSE.txt file, separately from the README, possibly combined with the license for any code. Some data may be subject to inherited license requirements, i.e., the data provider may allow for redistribution only if the data is licensed under specific rules - authors should check with their data providers. For instance, a data use license might require that users - the current author, but also any subsequent users - cite the data provider. Licensing can be complex. Some non-legal guidance may be found [here](https://social-science-data-editors.github.io/guidance/Licensing_guidance.html). For multiple licenses within a data package, the `LICENSE.txt` file might contain the concatenation of all the licenses that apply (for instance, a custom license for one file, plus a CC-BY license for another file).
->
-> INSTRUCTIONS: In many cases, it is not up to the creator of the replication package to simply define a license, a license may be *sticky* and be defined by the original data creator. Journals may also require that the license to be part of a certain family of licenses. Always check the journal's  submission guidelines for any such requirements.
+The survey dataset included in this replication package was collected by the authors and is made available under the Creative Commons Attribution 4.0 International (CC-BY 4.0) license.
 
-*Example:* The data are licensed under a Creative Commons/CC-BY-NC license. See LICENSE.txt for details.
-
+Users are free to share and adapt the data provided appropriate attribution is given. See LICENSE.txt for details.
 
 ### Summary of Availability
 
