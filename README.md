@@ -11,31 +11,21 @@ The code in this replication package constructs the empirical analysis and simul
 
 - functions.R is necessary to run the estimation algorithms for the empirical application and the simulation study (but is sourced automatically in the respective files)
 - predict_simulated_data.R runs the simulation study
-- results_simulated_data produces the tables and plots for the simulation study
+- results_simulated_data.R produces the tables and plots for the simulation study
 - empirical_application.R produces the plots for the empirical study
 - figures_for_latex.R and logit_vs_tree_plot.R produce plots created for explanatory purposes (outside of simulation study or empirical application)
 
-
+The simulation study code (results_simulated_data.R), which uses parallelization techniques, takes several days to run. The empirical study takes less than an hour to run.
 
 ## Data Availability and Provenance Statements
 
-> INSTRUCTIONS: 
-> - When the data were generated (by the authors) in the course of conducting (lab or field) **experiments**, or were collected as part of **surveys**, then the description of the provenance should describe the data generating process, i.e., survey or experimental procedures:
->   - For surveys, the whole questionnaire (code or images/PDF) including survey logic if not linear, interviewer instructions, enumeration lists, sample selection criteria.
->
->  The information should describe ALL data used, regardless of whether they are provided as part of the replication archive or not, and regardless of size or scope. The DAS should provide enough information that a replicator can obtain the data from the original source, even if the file is provided. 
->
-> DAS can be complex and varied. Examples are provided [here](https://social-science-data-editors.github.io/guidance/Requested_information_dcas.html), and below.
->
-> Importantly, if providing the data as part of the replication package, authors should be clear about whether they have the **rights** to distribute the data. Data may be subject to distribution restrictions due to sensitivity, IRB, proprietary clauses in the data use agreement, etc.
->
-> NOTE: DAS do not replace Data Citations (see [Guidance](https://social-science-data-editors.github.io/guidance/Data_citation_guidance.html)). Rather, they augment them. Depending on journal requirements and to some extent stylistic considerations, data citations should appear in the main article, in an appendix, or in the README. However, data citations only provide information **where** to find the data, not **how to access** those data. Thus, DAS augment data citations by going into additional detail that allow a researcher to assess cost, complexity, and availability over time of the data used by the original author.
+Questionnaire is made available in [ENTER LOCATION HERE]. Resulting data stored in BART_restricted.csv in the raw subfolder.
+
 
 ### Statement about Rights
 
-- [ ] I certify that the author(s) of the manuscript have legitimate access to and permission to use the data used in this manuscript. 
-- [ ] I certify that the author(s) of the manuscript have documented permission to redistribute/publish the data contained within this replication package. Appropriate permission are documented in the LICENSE.txt file file.
-
+- [x] I certify that the author(s) of the manuscript have legitimate access to and permission to use the data used in this manuscript. 
+- [x] I certify that the author(s) of the manuscript have documented permission to redistribute/publish the data contained within this replication package. Appropriate permission are documented in the LICENSE.txt file file.
 
 ### (Optional, but recommended) License for Data
 
