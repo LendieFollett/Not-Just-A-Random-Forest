@@ -34,6 +34,8 @@ rpart.plot(
   box.palette = my_palette(100), # Create a gradient with 100 colors
 extra = 8
   )
+ggsave("tree.pdf")
+
 # Predict probabilities using both models
 data$logit_pred <- predict(logit_model, type = "response")
 data$tree_pred <- predict(tree_model)[, 2]  # Probability of y = 1 for decision tree
@@ -70,3 +72,4 @@ library(gridExtra)
 p <- grid.arrange(logit_plot, tree_plot, ncol = 2)
 p
 ggsave("tree_vs_lr.pdf", plot = p)
+

@@ -289,3 +289,53 @@ ggsave("bird_wtp_envelope.pdf")
 
 
 
+
+#CREATE FIGURE 3 (conceptualization of WTP as area under a curve)
+temp2 <- bresults$temp %>% 
+  filter(ID %in% c(11) )   
+
+df <- temp2 %>% 
+  filter(CV_donate_bid > 25, value > 0, variable == "Rep3")
+
+ggplot(df, aes(x = CV_donate_bid, y = value)) + 
+  geom_area(aes(fill = variable, group = variable), alpha = 0.3) +
+  geom_line(aes(colour = variable, group = variable), linewidth = 1.2) +
+  theme_bw() +
+  scale_colour_grey() +
+  scale_fill_grey() +
+  labs(x = "A", y = "Model estimates of P(Y = 1 | A)") +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(), axis.text.y = element_blank(),
+    text = element_text(size = 15)
+  ) +
+  scale_y_continuous(limits = c(0, .15))
+
+ggsave("integral_mcmc1.pdf")
+
+
+#CREATE FIGURE 3 (conceptualization of MCMC samples and estimating WTP as area under a curve)
+
+temp =bresults$wtp%>% #tdat_long2
+  group_by(ID,variable) %>% #hh_income, variable, age
+  mutate(CDF = c(1,1-cumsum(value))[-length(value)])
+
+
+temp2 <- temp %>%
+  filter(ID %in% c(3) & variable %in% paste0("diff_Rep",1:5))
+
+temp3 <- tdat_long2 %>% filter(ID %in% c(3) & variable %in% paste0("diff_Rep",1:5))
+
+  ggplot() +
+    geom_line(aes(x = rep(1:10, 5), group = variable, y = CDF, colour = variable), data = temp2 %>% filter(CV_donate_bid > 0)) +
+    geom_text(aes(x = 10, y = CDF,colour = variable, label = paste0("Area = ", round(temp3$wtp_q,1))),data = temp2 %>% filter(CV_donate_bid ==2000), hjust = .3, size = 6)+
+    theme_bw() +scale_colour_grey() +
+    labs(x="A", y = "P(Y = 1 | A)") +
+    theme(legend.position = "none", axis.text.x = element_blank(),
+          axis.text.y = element_blank(),
+          text = element_text(size = 25)) +
+    expand_limits(x=c(0,11.5))
+ggsave("integral_mcmc.pdf")
+
+
+

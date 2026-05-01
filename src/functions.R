@@ -56,7 +56,7 @@ get_wtp <- function(pred_matrix){
     group_by(ID) %>% 
     summarise(wtp_q = mean(wtp_q))
   
-return(list(wtp=tdat_long2, mean_wtp = mean_wtp))
+return(list(wtp=tdat_long2, mean_wtp = mean_wtp, temp = temp))
   
 }
 
@@ -116,27 +116,7 @@ get_wtp2 <- function(pred_matrix, test_ends,test_notends, ndpost){
   
 }
 
-# 
-# temp =tdat_long%>% 
-#   group_by(ID,variable) %>% #hh_income, variable, age
-#   mutate(CDF = c(1,1-cumsum(value))[-length(value)])
-# 
-# 
-# temp2 <- temp %>% 
-#   filter(ID %in% c(3) & variable %in% paste0("diff_Rep",1:5))   
-# 
-# temp3 <- tdat_long2 %>% filter(ID %in% c(3) & variable %in% paste0("diff_Rep",1:5))
-# 
-#   ggplot() + 
-#     geom_line(aes(x = rep(1:10, 5), group = variable, y = CDF, colour = variable), data = temp2 %>% filter(CV_donate_bid > 0)) +
-#     geom_text(aes(x = 10, y = CDF,colour = variable, label = paste0("Area = ", round(temp3$wtp_q,1))),data = temp2 %>% filter(CV_donate_bid ==2000), hjust = .3, size = 6)+
-#     theme_bw() +scale_colour_grey() +
-#     labs(x="A", y = "P(Y = 1 | A)") +
-#     theme(legend.position = "none", axis.text.x = element_blank(),
-#           axis.text.y = element_blank(),
-#           text = element_text(size = 25)) +
-#     expand_limits(x=c(0,11.5))
-# ggsave("integral_mcmc.pdf")
+
 
 
 
