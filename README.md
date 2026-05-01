@@ -46,8 +46,6 @@ Datafile:  `raw/BART_restricted.csv`
 
 
 - R 4.5.1 (2025-06-13)-- "Great Square Root"
-  - `tidyr` (0.8.3)
-  - `rdrobust` (0.99.4)
   - the file "`src/env_setup.R`" will install all dependencies (latest version), and should be run once prior to running other programs.
 
 ### Controlled Randomness
