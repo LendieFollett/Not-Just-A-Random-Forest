@@ -10,7 +10,9 @@ contributors:
 The code in this replication package constructs the empirical analysis and simulation study using R. 
 
 
-The simulation study code (results_simulated_data.R), which uses parallelization techniques, takes several days to run. The empirical study takes less than an hour to run.
+The simulation study is computationally intensive and uses parallel processing. On a modern laptop with approximately 10 CPU cores and 16 GB RAM, the simulation requires approximately 3–7 days to complete depending on processor speed and available cores.
+
+Users wishing to verify functionality rather than reproduce all results exactly may reduce the number of simulation replications inside `predict_simulated_data.R`.
 
 ## Data Availability and Provenance Statements
 
@@ -55,9 +57,6 @@ Datafile:  `raw/BART_restricted.csv`
 
 Randomness is introduced in generating the simulated datasets (covariates and error terms), train/test splits, and cross validation splits. Random seed is set at line 58, 248, 358, of program predict_simulated_data.R.
 
-### Memory, Runtime, Storage Requirements
-
-> INSTRUCTIONS: Memory and compute-time requirements may also be relevant or even critical. Some example text follows. It may be useful to break this out by Table/Figure/section of processing. For instance, some estimation routines might run for weeks, but data prep and creating figures might only take a few minutes. You should also describe how much storage is required in addition to the space visible in the typical repository, for instance, because data will be unzipped, data downloaded, or temporary files written.
 
 #### Summary time to reproduce
 
@@ -101,16 +100,13 @@ Approximate storage space needed:
 
 The code was last run on a 10-core Apple Silicon (M4) MacBook Air running macOS 26.4.1 with 16 GB of memory and approximately 133 GB of available disk space.
 
-## Description of programs/code
+### Details on various programs
 
-> INSTRUCTIONS: Give a high-level overview of the program files and their purpose. Remove redundant/ obsolete files from the Replication archive.
-
-- Programs in `programs/01_dataprep` will extract and reformat all datasets referenced above. The file `programs/01_dataprep/main.do` will run them all.
-- Programs in `programs/02_analysis` generate all tables and figures in the main body of the article. The program `programs/02_analysis/main.do` will run them all. Each program called from `main.do` identifies the table or figure it creates (e.g., `05_table5.do`).  Output files are called appropriate names (`table5.tex`, `figure12.png`) and should be easy to correlate with the manuscript.
-- Programs in `programs/03_appendix` will generate all tables and figures  in the online appendix. The program `programs/03_appendix/main-appendix.do` will run them all. 
-- Ado files have been stored in `programs/ado` and the `main.do` files set the ADO directories appropriately. 
-- The program `programs/00_setup.do` will populate the `programs/ado` directory with updated ado packages, but for purposes of exact reproduction, this is not needed. The file `programs/00_setup.log` identifies the versions as they were last updated.
-- The program `programs/config.do` contains parameters used by all programs, including a random seed. Note that the random seed is set once for each of the two sequences (in `02_analysis` and `03_appendix`). If running in any order other than the one outlined below, your results may differ.
+- `src/functions.R` is necessary to run the estimation algorithms for the empirical application and the simulation study (but is sourced automatically in the respective files)
+- `src/Simulation Study Code/predict_simulated_data.R` runs the simulation study
+- `src/Simulation Study Code/results_simulated_data.R` produces the tables and plots for the simulation study
+- `src/empirical_application.R` produces the plots for the empirical study
+- `src/Illustrative Plots Code/figures_for_latex.R` and `src/Illustrative Plots Code/logit_vs_tree_plot.R` produce plots created for explanatory purposes (outside of simulation study or empirical application)
 
 ### (Optional, but recommended) License for Code
 
@@ -120,20 +116,20 @@ The code is licensed under a MIT/BSD/GPL [choose one!] license. See LICENSE.txt 
 
 ## Instructions to Replicators
 
-> INSTRUCTIONS: The first two sections ensure that the data and software necessary to conduct the replication have been collected. This section then describes a human-readable instruction to conduct the replication. This may be simple, or may involve many complicated steps. It should be a simple list, no excess prose. Strict linear sequence. If more than 4-5 manual steps, please wrap a main program/Makefile around them, in logical sequences. Examples follow.
+**To replicate Simulation Study:**
+
+- Run `src/env_setup.R` once on a new system to set up the working environment. 
+- Run `src/Simulation Study Code/predict_simulationed_data.R` to run all steps in sequence. Note that this file sources the `src/functions.R` file.
+- Run `src/Simulation Study Code/results_simulated_data.R` to produce plots and tables.
+
+**To replicate Empirical Study:**
 
 - Run `src/env_setup.R` once on a new system to set up the working environment. 
 - Download the data files referenced above. Each should be stored in the prepared subdirectories of `raw/`, in the format that you download them in. 
 - Edit `src/empirical_application.R` to adjust the default path. Note that this file sources the `src/functions.R` file.
 - Run `src/empirical_application` to run all steps in sequence.
 
-### Details on various programs
 
-- `src/functions.R` is necessary to run the estimation algorithms for the empirical application and the simulation study (but is sourced automatically in the respective files)
-- `src/Simulation Study Code/predict_simulated_data.R` runs the simulation study
-- `src/Simulation Study Code/results_simulated_data.R` produces the tables and plots for the simulation study
-- `src/empirical_application.R` produces the plots for the empirical study
-- `src/Illustrative Plots Code/figures_for_latex.R` and `src/Illustrative Plots Code/logit_vs_tree_plot.R` produce plots created for explanatory purposes (outside of simulation study or empirical application)
 
 ## List of tables and programs
 
