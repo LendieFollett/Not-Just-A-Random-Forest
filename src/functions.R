@@ -217,7 +217,7 @@ results_combined %>%
     scale_y_continuous(labels = scales::percent_format(accuracy = 1))+
   #  scale_colour_brewer("Model", type = "qual", palette = "Dark2") +
   theme_bw()+
-    theme(text=element_text(size = 25),legend.key.width = unit(2, "cm") ) +
+    theme(text=element_text(size = 25),legend.key.width = unit(2, "cm"),axis.text.x = element_text(angle = 45, hjust = 1) ) +
     scale_x_continuous(breaks = unique(results_combined$n))
 }
   
@@ -243,10 +243,10 @@ cor_plot <- function(results_combined, sym, sig){
     #scale_colour_grey("Model",start = 0, end = .8) +
     #  scale_colour_brewer("Model", type = "qual", palette = "Dark2") +
     theme_bw()+
-    theme(text=element_text(size = 25),legend.key.width = unit(2, "cm") ) +
+    theme(text=element_text(size = 25),legend.key.width = unit(2, "cm"),axis.text.x = element_text(angle = 45, hjust = 1) ) +
     scale_x_continuous(breaks = unique(results_combined$n))
 }
-
+#,caption = paste0("Simulation scenario: sigma = ", sig, "covariate dist = ", sym)
 
 bias_plot <- function(results_combined, sym, sig){
 results_combined %>%
@@ -282,7 +282,7 @@ results_combined %>%
     color = "Model"
   ) +
   theme_bw(base_size = 13) +
-  theme(text=element_text(size = 25),legend.key.width = unit(2, "cm") ) 
+    theme(text=element_text(size = 25),legend.key.width = unit(2, "cm"),axis.text.x = element_text(angle = 45, hjust = 1) ) 
 }
   
 

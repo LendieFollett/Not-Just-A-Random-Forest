@@ -270,7 +270,7 @@ results <- foreach(comb = comb, .packages = pkgs) %:%
         )
         
         p_valid <- colMeans(fit_cv$prob.test)
-        mean((p_valid - bart_y_valid_cv)^2)   # Brier score
+        mean((p_valid - bart_y_valid_cv)^2)   # score
       })
       
       best_idx        <- which.min(bart_tune_scores)
