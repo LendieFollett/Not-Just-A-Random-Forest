@@ -1,5 +1,5 @@
 ---
-title: Not Just a Random Forest: Using Bayesian Additive Regression Trees to Estimate Willingness to Pay to Protect Critical Habitat
+title: "Not Just a Random Forest: Using Bayesian Additive Regression Trees to Estimate Willingness to Pay to Protect Critical Habitat"
 contributors:
   - Lendie Follett
   - Brian Vander Naald
