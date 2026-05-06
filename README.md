@@ -105,8 +105,6 @@ The code was last run on a 10-core Apple Silicon (M4) MacBook Air running macOS 
 
 ### (Optional, but recommended) License for Code
 
-> INSTRUCTIONS: Most journal repositories provide for a default license, but do not impose a specific license. Authors should actively select a license. This should be provided in a LICENSE.txt file, separately from the README, possibly combined with the license for any data provided. Some code may be subject to inherited license requirements, i.e., the original code author may allow for redistribution only if the code is licensed under specific rules - authors should check with their sources. For instance, some code authors require that their article describing the econometrics of the package be cited. Licensing can be complex. Some non-legal guidance may be found [here](https://social-science-data-editors.github.io/guidance/Licensing_guidance.html).
-
 The code is licensed under a MIT/BSD/GPL [choose one!] license. See LICENSE.txt file for details.
 
 ## Instructions to Replicators
@@ -142,17 +140,17 @@ The provided code reproduces:
 
 | Figure/Table #    | Program                  | Line Number | Output file                      | Note                            |
 |-------------------|--------------------------|-------------|----------------------------------|---------------------------------|
-| Table 1           | 02_analysis/table1.do    |             | summarystats.csv                 ||
-| Table 2           | 02_analysis/table2and3.do| 15          | table2.csv                       ||
-| Table 3           | 02_analysis/table2and3.do| 145         | table3.csv                       ||
-| Figure 1          | src/Illustrative Plots Code/logit_vs_tree_plot.R        | |  tree.pdf                               |       |
-| Figure 2          | src/Illustrative Plots Code/logit_vs_tree_plot.R      | | tree_vs_lr.pdf                     ||
-| Figure 3          | src/empirical_application.R      |  | integral_mcmc1.pdf             |     |
-| Figure 4          |  src/empirical_application.R    |             | integral_mcmc.pdf          |     |
-| Figure 5          | src/results_simulated_data.R     |             | cor_sym_7.pdf,cor_sym_15.pdf            |     |
-| Figure 6          | src/results_simulated_data.R     |             | RMSE_sym_7.pdf,RMSE_sym_15.pdf           |     |
-| Figure 7          | src/results_simulated_data.R     |             | bias_sym_7.pdf,bias_sym_15.pdf           |     |
-| Figure 8          | BAR CHART?!    |             | percent_yes_responses.pdf            |     |
-| Figure 9          | src/empirical_application.R  |             | bart_probit_compare.pdf            |     |
-| Figure 10          | src/empirical_application.R  |             | bird_wtp_both.pdf          |     |
+| Table 1           | 02_analysis/table1.do                            |    | summarystats.csv                 ||
+| Table 2           | 02_analysis/table2and3.do                        | 15 | table2.csv                       ||
+| Table 3           | 02_analysis/table2and3.do                        | 145| table3.csv                       ||
+| Figure 1          | src/Illustrative Plots Code/logit_vs_tree_plot.R |32  |  tree.pdf                               |       |
+| Figure 2          | src/Illustrative Plots Code/logit_vs_tree_plot.R | 73 | tree_vs_lr.pdf                     ||
+| Figure 3          | src/empirical_application.R                      | 315| integral_mcmc1.pdf             |     |
+| Figure 4          | src/empirical_application.R                      | 340| integral_mcmc.pdf          |     |
+| Figure 5          | src/results_simulated_data.R                     |    | cor_sym_7.pdf,cor_sym_15.pdf            |     |
+| Figure 6          | src/results_simulated_data.R                     |    | RMSE_sym_7.pdf,RMSE_sym_15.pdf           |     |
+| Figure 7          | src/results_simulated_data.R                     |    | bias_sym_7.pdf,bias_sym_15.pdf           |     |
+| Figure 8          | BAR CHART?!                                      |    | percent_yes_responses.pdf            |     |
+| Figure 9          | src/empirical_application.R                      |   | bart_probit_compare.pdf            |     |
+| Figure 10          | src/empirical_application.R                     |   | bird_wtp_both.pdf          |     |
 

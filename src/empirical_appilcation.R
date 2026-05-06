@@ -57,7 +57,7 @@ mb <- pbart(x.train = d[,-1],
              y.train = d[,1],
              x.test = test_notends[,-1],
              ntree = 200,
-             ndpost = 5000,nskip = 5000)
+             ndpost = 4000,nskip = 5000)
 
 
 bprobit <- stan_glm(CV_donate_yes ~ CV_donate_bid +hh_income  + age + conservative_politics + female ,
@@ -287,8 +287,9 @@ ggplot(dcurves_combined, aes(x = quant, y = mean, color = method)) +
 ggsave("bird_wtp_envelope.pdf")
 
 
-
-
+################################################
+#CONCEPTUALIZATION FIGURES (NOT RELATED TO EMPIRICAL FINDINGS)
+################################################
 
 #CREATE FIGURE 3 (conceptualization of WTP as area under a curve)
 temp2 <- bresults$temp %>% 
@@ -314,26 +315,27 @@ ggplot(df, aes(x = CV_donate_bid, y = value)) +
 ggsave("integral_mcmc1.pdf")
 
 
-#CREATE FIGURE 3 (conceptualization of MCMC samples and estimating WTP as area under a curve)
+#CREATE FIGURE 4 (conceptualization of MCMC samples and estimating WTP as area under a curve)
 
-temp =bresults$wtp%>% #tdat_long2
+temp =bresults$temp%>% #tdat_long2
   group_by(ID,variable) %>% #hh_income, variable, age
   mutate(CDF = c(1,1-cumsum(value))[-length(value)])
 
-
 temp2 <- temp %>%
-  filter(ID %in% c(3) & variable %in% paste0("diff_Rep",1:5))
+  filter(ID %in% c(3) & variable %in% paste0("Rep",1:5)) %>% 
+  arrange(variable, CV_donate_bid)
 
-temp3 <- tdat_long2 %>% filter(ID %in% c(3) & variable %in% paste0("diff_Rep",1:5))
+temp3 <- bresults$wtp %>% 
+  filter(ID == 3& variable %in% paste0("Rep",1:5))
 
   ggplot() +
-    geom_line(aes(x = rep(1:10, 5), group = variable, y = CDF, colour = variable), data = temp2 %>% filter(CV_donate_bid > 0)) +
-    geom_text(aes(x = 10, y = CDF,colour = variable, label = paste0("Area = ", round(temp3$wtp_q,1))),data = temp2 %>% filter(CV_donate_bid ==2000), hjust = .3, size = 6)+
+    geom_line(aes(x = rep(1:9, 5), group = variable, y = value, colour = variable), data = temp2 %>% filter(CV_donate_bid > 0 & CV_donate_bid <= 2000)) +
+    geom_text(aes(x = 9, y = value,colour = variable, label = paste0("Area = ", round(temp3$wtp_q,1))),data = temp2 %>% filter(CV_donate_bid ==2000), hjust = .3, size = 6)+
     theme_bw() +scale_colour_grey() +
     labs(x="A", y = "P(Y = 1 | A)") +
-    theme(legend.position = "none", axis.text.x = element_blank(),
-          axis.text.y = element_blank(),
-          text = element_text(size = 25)) +
+   # theme(legend.position = "none", axis.text.x = element_blank(),
+  #        axis.text.y = element_blank(),
+  #        text = element_text(size = 25)) +
     expand_limits(x=c(0,11.5))
 ggsave("integral_mcmc.pdf")
 

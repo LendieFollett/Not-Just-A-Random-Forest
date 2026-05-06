@@ -56,7 +56,7 @@ get_wtp <- function(pred_matrix){
     group_by(ID) %>% 
     summarise(wtp_q = mean(wtp_q))
   
-return(list(wtp=tdat_long2, mean_wtp = mean_wtp, temp = temp))
+return(list(wtp=tdat_long2, mean_wtp = mean_wtp, temp = tdat_long))
   
 }
 
