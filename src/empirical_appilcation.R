@@ -5,30 +5,33 @@ library(reshape2)
 library(rstanarm)
 library(tidyr)
 library(Iso)
+library(caret)
 
 source("src/functions.R")
 
 
-d <- read.csv("raw/BART_restricted.csv")
+d <- read.csv("/Users/lendie.follettdrake.edu/Library/CloudStorage/Dropbox/BART/NJARF_raw/BART_restricted.csv")
 
 str(d)
+
+
 
 d <- d%>%
   select(CV_donate_yes, CV_donate_bid, hh_income, age,conservative_politics, female) 
 
 d <- d[complete.cases(d),]
-
 #test set: each person / unique combination of demographics needs
 #to be paired with each CV_donate_bid, and then the endpoints as well
 test <- d %>%
   select(hh_income, age,conservative_politics, female)
-  #filter(CV_donate_bid %in% c(25,100, 500, 1000, 2000))
 test <- test[complete.cases(test),]
 
 # Add the new columns to the `ends` data frame
 pts <- c(unique(d$CV_donate_bid),c(0, 2001))
 
+
 test$ID <- 1:nrow(test)
+#repeat each unique row with each bid amount
 test2 <- test[rep(1:nrow(test), each = length(pts)),] %>% 
   mutate(CV_donate_bid = rep(pts, nrow(test)))
 
@@ -52,14 +55,18 @@ p%>%
   geom_line(aes(x = CV_donate_bid, y = Pyes)) +
   scale_y_continuous(limits = c(0, .7)) 
 
-
+######################################
+# BART--------------------
+######################################
 mb <- pbart(x.train = d[,-1],
-             y.train = d[,1],
-             x.test = test_notends[,-1],
-             ntree = 200,
-             ndpost = 4000,nskip = 5000)
+            y.train = d[,1],
+            x.test = test_notends[,-1],
+            ntree = 200,
+            ndpost = 4000,nskip = 5000)
 
-
+######################################
+# BAYESIAN PROBIT--------------------
+######################################
 bprobit <- stan_glm(CV_donate_yes ~ CV_donate_bid +hh_income  + age + conservative_politics + female ,
                     data = d , 
                     family = binomial(link = "probit"), 
@@ -67,6 +74,9 @@ bprobit <- stan_glm(CV_donate_yes ~ CV_donate_bid +hh_income  + age + conservati
                     prior_intercept = normal(0, 1), 
                     chains = 4, iter = 2000,
                     init = "0")
+
+
+
 
 #posterior sampling distributions of WTP for each person
 bcoefs <- as.data.frame(bprobit)
@@ -76,45 +86,42 @@ b <- as.matrix(d[,bcoefs_x]) %*%t(-bcoefs[bcoefs_x]/bcoefs[,"CV_donate_bid"])
 WTP_bprobit <- (b + matrix(a, nrow = nrow(b), ncol = ncol(b), byrow = TRUE)) %>%
   data.frame() %>% 
   mutate(ID = as.character(c(1:978))) %>% 
-  melt(measure.vars = paste0("X", 1:4000), value.name = "wtp_q")
+  melt(measure.vars = paste0("X", 1:4000), value.name = "wtp_q") #%>% 
+# mutate(wtp_q = pmax(wtp_q, 0) )
+
+
 
 WTP_bprobit_means <- WTP_bprobit %>% group_by(ID) %>% summarize(mean = mean(wtp_q)) %>% pull(mean) 
 
-#bart wtp
+#transform probabilities into WTP for each MCMC sample
 bresults <- get_wtp(pred_matrix = mb$prob.test %>%  t() )
-#logistic regression (bayesian) wtp
 lrresults <- get_wtp(pred_matrix = posterior_epred(bprobit,  test_notends[,-1] ) %>% t())
+
 
 tdat_long2 <- bresults$wtp
 tdatlr_long2 <- lrresults$wtp
 
-
-tdat_long2 %>% 
+temp <- rbind(data.frame(tdat_long2, model = "BART"),
+              data.frame(tdatlr_long2, model = "Probit")) %>% 
   merge(test, by = "ID") %>% 
-  filter(age <80) %>% 
-  mutate(age_f = factor(age, levels = c(20,30,40,50,60,70),
-                        labels = c("18-24", "25-34", "35-44",
-                                   "45-54", "55-64", "65-74"))) %>% 
-  ggplot() +
-  geom_boxplot(aes(y = wtp_q, x = as.factor(hh_income), colour = conservative_politics %>% as.factor) , alpha = I(.5)) +
-  facet_wrap(~age_f, scales = "free")+
-  theme_bw(base_size = 16)+
-  scale_colour_grey("Conserv.\nPolitics")+
-  labs(x = "Income", y = "WTP (US $)") +
-  ggtitle("BART-based WTP estimates")
-ggsave("bart_exploratory.pdf", width = 12, height = 10)
+  group_by(model, hh_income, age,conservative_politics, female) %>% 
+  summarise(mean = mean(wtp_q),
+            lower = quantile(wtp_q, .025),
+            upper = quantile(wtp_q, .975)) 
 
-tdatlr_long2 %>% 
-  merge(test, by = "ID") %>% 
-  filter(age <80) %>% 
+temp%>% 
+  filter(hh_income < 175 & hh_income != 30 & model != "NN") %>% #taking out levels to clean up graph
+  mutate(female = factor(female, levels = c(0,1), labels = c("Male", "Female")),
+         conservative_politics = factor(conservative_politics, levels = c(0,1), labels = c("Not Conservative", "Conservative"))) %>% 
   ggplot() +
-  geom_boxplot(aes(y = wtp_q, x = as.factor(hh_income), colour = conservative_politics %>% as.factor) , alpha = I(.5)) +
-  facet_wrap(~age, scales = "free")+
-  scale_colour_brewer("Politics", type = "qual")+
+  geom_line(aes(x = age, y = mean, linetype = model, colour = hh_income, group = interaction(hh_income, model))) +
+  facet_grid(female~conservative_politics) +
   theme_bw() +
-  labs(x = "Income", y = "WTP (US $)")+
-  ggtitle("Probit-based WTP estimates")
-ggsave("probit_exploratory.pdf")
+  scale_colour_continuous("Household\nIncome", palette = c("grey20", "grey90"))+
+  scale_linetype("Model") +
+  labs(x = "Age", y = "Estimated WTP")
+ggsave("bart_probit_compare.pdf", width = 12, height = 10)
+
 
 #table
 table_dat <- tdat_long2 %>% 
@@ -171,7 +178,7 @@ names(summary_listlr) <- group_vars
 vars = c("hh_income", "age", "conservative_politics", "female")
 x <- vars[1]
 rbind(summary_list[[x]],summary_listlr[[x]]) %>% 
-ggplot( aes(x = factor(group_value), y = mean_wtp, fill = model)) +
+  ggplot( aes(x = factor(group_value), y = mean_wtp, fill = model)) +
   geom_col(position = position_dodge(width = 0.9), width = 0.7) +
   geom_errorbar(aes(ymin = lower, ymax = upper),
                 position = position_dodge(width = 0.9), width = 0.2) +
@@ -207,8 +214,8 @@ lr_summaries <- tdatlr_long2 %>%
             .groups = "drop") 
 
 rbind(#data.frame(bart_summaries, model = "BART")
-      data.frame(lr_summaries, model = "Bayesian Probit")
-      )%>% 
+  data.frame(lr_summaries, model = "Bayesian Probit")
+)%>% 
   mutate(female = factor(female, levels = c(1,0), labels = c("Female", "Male"))) %>% 
   ggplot( aes(x = as.factor(hh_income), y = mean_wtp, fill = female)) +
   geom_col(position = position_dodge(width = 0.9), width = 0.7) +
@@ -246,22 +253,12 @@ dcurves2 <- dcurves%>%
     quant95 = quantile(wtp_q, .95)) 
 write.csv(dcurves2, "bart_bird_demand_curve.csv")
 
-dcurveslr2 <- dcurveslr%>% 
+
+
+dcurves2lr <- dcurveslr%>% 
   group_by(quant = round_to_nearest_0.05(quant)) %>% 
   summarise(
     mean = median(wtp_q),
-    quant05 = quantile(wtp_q, .05),
-    quant95 = quantile(wtp_q, .95)) 
-
-
-
-p3 <- grid.arrange(p1, p2, ncol = 2, widths = c(2,1))
-ggsave("birds_wtp_both.pdf", plot = p3)
-
-
-dcurves2lr <- dcurveslr%>% group_by(quant = round_to_nearest_0.05(quant)) %>% 
-  summarise(
-    mean = mean(wtp_q),
     quant05 = quantile(wtp_q, .05),
     quant95 = quantile(wtp_q, .95))
 
@@ -275,69 +272,31 @@ dcurves2$method <- "BART"
 dcurves_combined <- rbind(dcurves2lr, dcurves2)
 
 # Plot
-ggplot(dcurves_combined, aes(x = quant, y = mean, color = method)) +
+p1 <- ggplot(dcurves_combined, aes(x = quant, y = mean, color = method)) +
   geom_line() +
   geom_ribbon(aes(ymin = quant05, ymax = quant95, fill = method), alpha = 0.3, color = NA) +
   scale_color_manual(name = "Model", values = c("Bayesian\n Probit" = "grey70", "BART" = "grey10")) +
   scale_fill_manual(name = "Model", values = c("Bayesian\n Probit" = "grey70", "BART" = "grey10")) +
   labs(y = "WTP (US $)", x = "P(Y ≤ y)") +
   theme_bw() +
-  theme(text = element_text(size = 20))
-
+  theme(text = element_text(size = 20),
+        legend.position = "none")
+p1
 ggsave("bird_wtp_envelope.pdf")
 
 
-################################################
-#CONCEPTUALIZATION FIGURES (NOT RELATED TO EMPIRICAL FINDINGS)
-################################################
-
-#CREATE FIGURE 3 (conceptualization of WTP as area under a curve)
-temp2 <- bresults$temp %>% 
-  filter(ID %in% c(11) )   
-
-df <- temp2 %>% 
-  filter(CV_donate_bid > 25, value > 0, variable == "Rep3")
-
-ggplot(df, aes(x = CV_donate_bid, y = value)) + 
-  geom_area(aes(fill = variable, group = variable), alpha = 0.3) +
-  geom_line(aes(colour = variable, group = variable), linewidth = 1.2) +
+p2 <- ggplot() +
+  geom_line(aes(x = quant, y = wtp_q, group = variable),alpha = .3, data = filter(dcurves, variable %in% paste0("Rep",1:100))) +
+  geom_line(aes(x = quant, y = wtp_q, group = variable),alpha = .3,colour = "grey", data = filter(dcurveslr, variable %in% paste0("Rep",1:100)))  +
   theme_bw() +
-  scale_colour_grey() +
-  scale_fill_grey() +
-  labs(x = "A", y = "Model estimates of P(Y = 1 | A)") +
-  theme(
-    legend.position = "none",
-    axis.text.x = element_blank(), axis.text.y = element_blank(),
-    text = element_text(size = 15)
-  ) +
-  scale_y_continuous(limits = c(0, .15))
-
-ggsave("integral_mcmc1.pdf")
+  labs(y = "WTP (US $)", x = "P(Y ≤ y)") +
+  theme(text = element_text(size = 20),
+        legend.position = "none")
+p2
+ggsave("bird_wtp_envelope_step1.pdf")
 
 
-#CREATE FIGURE 4 (conceptualization of MCMC samples and estimating WTP as area under a curve)
-
-temp =bresults$temp%>% #tdat_long2
-  group_by(ID,variable) %>% #hh_income, variable, age
-  mutate(CDF = c(1,1-cumsum(value))[-length(value)])
-
-temp2 <- temp %>%
-  filter(ID %in% c(3) & variable %in% paste0("Rep",1:5)) %>% 
-  arrange(variable, CV_donate_bid)
-
-temp3 <- bresults$wtp %>% 
-  filter(ID == 3& variable %in% paste0("Rep",1:5))
-
-  ggplot() +
-    geom_line(aes(x = rep(1:9, 5), group = variable, y = value, colour = variable), data = temp2 %>% filter(CV_donate_bid > 0 & CV_donate_bid <= 2000)) +
-    geom_text(aes(x = 9, y = value,colour = variable, label = paste0("Area = ", round(temp3$wtp_q,1))),data = temp2 %>% filter(CV_donate_bid ==2000), hjust = .3, size = 6)+
-    theme_bw() +scale_colour_grey() +
-    labs(x="A", y = "P(Y = 1 | A)") +
-   # theme(legend.position = "none", axis.text.x = element_blank(),
-  #        axis.text.y = element_blank(),
-  #        text = element_text(size = 25)) +
-    expand_limits(x=c(0,11.5))
-ggsave("integral_mcmc.pdf")
-
-
+p3 <- grid.arrange(p2, p1,ncol=2,
+                   widths = c(3,3))
+ggsave(filename = "bird_wtp_both.pdf", plot = p3)
 

@@ -140,17 +140,15 @@ The provided code reproduces:
 
 | Figure/Table #    | Program                  | Line Number | Output file                      | Note                            |
 |-------------------|--------------------------|-------------|----------------------------------|---------------------------------|
-| Table 1           | 02_analysis/table1.do                            |    | summarystats.csv                 ||
-| Table 2           | 02_analysis/table2and3.do                        | 15 | table2.csv                       ||
-| Table 3           | 02_analysis/table2and3.do                        | 145| table3.csv                       ||
+| Table 2           | src/Simulation Study Code/results_simulated_data.R |76 | (latex code)                      ||
 | Figure 1          | src/Illustrative Plots Code/logit_vs_tree_plot.R |32  |  tree.pdf                               |       |
 | Figure 2          | src/Illustrative Plots Code/logit_vs_tree_plot.R | 73 | tree_vs_lr.pdf                     ||
 | Figure 3          | src/empirical_application.R                      | 315| integral_mcmc1.pdf             |     |
 | Figure 4          | src/empirical_application.R                      | 340| integral_mcmc.pdf          |     |
-| Figure 5          | src/results_simulated_data.R                     |    | cor_sym_7.pdf,cor_sym_15.pdf            |     |
-| Figure 6          | src/results_simulated_data.R                     |    | RMSE_sym_7.pdf,RMSE_sym_15.pdf           |     |
-| Figure 7          | src/results_simulated_data.R                     |    | bias_sym_7.pdf,bias_sym_15.pdf           |     |
-| Figure 8          | BAR CHART?!                                      |    | percent_yes_responses.pdf            |     |
-| Figure 9          | src/empirical_application.R                      |   | bart_probit_compare.pdf            |     |
-| Figure 10          | src/empirical_application.R                     |   | bird_wtp_both.pdf          |     |
+| Figure 5          | src/Simulation Study Code/results_simulated_data.R                     |27  | cor_sym_7.pdf,cor_sym_15.pdf            |     |
+| Figure 6          | src/Simulation Study Code/results_simulated_data.R                     |25  | RMSE_sym_7.pdf,RMSE_sym_15.pdf           |     |
+| Figure 7          | src/Simulation Study Code/results_simulated_data.R                     |60  | bias_sym_7.pdf,bias_sym_15.pdf           |     |
+| Figure 8          | src/intro_plots_bird.R                           |12  | percent_yes_responses.pdf            |     |
+| Figure 9          | src/empirical_application.R                      |112 | bart_probit_compare.pdf            |     |
+| Figure 10          | src/empirical_application.R                     |299 | bird_wtp_both.pdf          |     |
 
