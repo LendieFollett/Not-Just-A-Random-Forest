@@ -126,11 +126,6 @@ The code is licensed under a MIT/BSD/GPL [choose one!] license. See LICENSE.txt 
 
 ## List of tables and programs
 
-
-> INSTRUCTIONS: Your programs should clearly identify the tables and figures as they appear in the manuscript, by number. Sometimes, this may be obvious, e.g. a program called "`table1.do`" generates a file called `table1.png`. Sometimes, mnemonics are used, and a mapping is necessary. In all circumstances, provide a list of tables and figures, identifying the program (and possibly the line number) where a figure is created.
->
-> NOTE: If the public repository is incomplete, because not all data can be provided, as described in the data section, then the list of tables should clearly indicate which tables, figures, and in-text numbers can be reproduced with the public material provided.
-
 The provided code reproduces:
 
 - [x] All numbers provided in text in the paper
