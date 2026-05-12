@@ -140,11 +140,11 @@ The provided code reproduces:
 
 | Figure/Table #    | Program                  | Line Number | Output file                      | Note                            |
 |-------------------|--------------------------|-------------|----------------------------------|---------------------------------|
-| Table 2           | src/Simulation Study Code/results_simulated_data.R |76 | (latex code)                      ||
+| Table 2           | src/Simulation Study Code/results_simulated_data.R |76 |                     | Line 76 will provide latex code that can be copy/pasted|
 | Figure 1          | src/Illustrative Plots Code/logit_vs_tree_plot.R |32  |  tree.pdf                               |       |
 | Figure 2          | src/Illustrative Plots Code/logit_vs_tree_plot.R | 73 | tree_vs_lr.pdf                     ||
-| Figure 3          | src/empirical_application.R                      | 315| integral_mcmc1.pdf             |     |
-| Figure 4          | src/empirical_application.R                      | 340| integral_mcmc.pdf          |     |
+| Figure 3          | src/empirical_application.R                      | 315| integral_mcmc1.pdf             | takes a random ID, first 5 MCMC samples for illustration only    |
+| Figure 4          | src/empirical_application.R                      | 340| integral_mcmc.pdf          |  takes a random ID, first 5 MCMC samples for illustration only    |
 | Figure 5          | src/Simulation Study Code/results_simulated_data.R                     |27  | cor_sym_7.pdf,cor_sym_15.pdf            |     |
 | Figure 6          | src/Simulation Study Code/results_simulated_data.R                     |25  | RMSE_sym_7.pdf,RMSE_sym_15.pdf           |     |
 | Figure 7          | src/Simulation Study Code/results_simulated_data.R                     |60  | bias_sym_7.pdf,bias_sym_15.pdf           |     |
