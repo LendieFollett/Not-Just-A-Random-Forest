@@ -128,9 +128,9 @@ The code is licensed under a MIT/BSD/GPL [choose one!] license. See LICENSE.txt 
 
 The provided code reproduces:
 
-- [x] All numbers provided in text in the paper
-- [x] All tables and figures in the paper
-- [ ] Selected tables and figures in the paper, as explained and justified below.
+- [] All numbers provided in text in the paper
+- [] All tables and figures in the paper
+- [x ] Selected tables and figures in the paper, as explained and justified below.
 
 
 | Figure/Table #    | Program                  | Line Number | Output file                      | Note                            |
